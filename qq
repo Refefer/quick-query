@@ -243,7 +243,8 @@ def stream_tokens(
 def stream_cot_blocks(
     response,
     think_tag=None,
-    min_chunk_size=None
+    min_chunk_size=None,
+    cr_after_end_block=True
 ):
     stream = stream_tokens(response, think_tag, min_chunk_size)
     if think_tag is None:
@@ -267,6 +268,9 @@ def stream_cot_blocks(
                     before, after = chunk.split(end_block, 1)
                     yield in_block, before
                     yield in_block, end_block
+                    if cr_after_end_block:
+                        yield in_block, '\n'
+
                     in_block = False
                     buffer = after
                     continue
@@ -293,11 +297,18 @@ def process_stream(
     formatter
 ):
     token_stream = stream_cot_blocks(response, cot_token, min_chunk_size)
+    response = []
     if needs_buffering:
-        response = ''.join(chunk for _, chunk in token_stream)
-        formatter.print(response)
+        out_message = []
+        for in_block, chunk in token_stream:
+            response.append(chunk)
+            if in_block:
+                formatter.print_in_block(chunk)
+            else:
+                out_message.append(chunk)
+
+        formatter.print_out_block(''.join(out_message))
     else:
-        response = []
         for in_block, chunk in token_stream:
             response.append(chunk)
             if in_block:
@@ -305,9 +316,7 @@ def process_stream(
             else:
                 formatter.print_out_block(chunk)
 
-        response = ''.join(response)
-
-    return response 
+    return ''.join(response)
 
 def get_formatter(args):
     in_block_path = args.cot_block_fd
@@ -332,6 +341,15 @@ def chat(
             if user_input.lower() == '/reset':
                 messages = messages[:orig_message_len]
                 continue
+
+            if user_input.startswith('/save '):
+                path = user_input[6:]
+                with open(path, 'w') as out:
+                    for message in messages:
+                        print(f"Role: {message['role']}\n{message['content']}\n", file=out)
+
+                continue
+
 
             messages.append({"role": "user", "content": user_input})
             response = send_chat_completion(
@@ -417,20 +435,17 @@ class MarkdownFormatter(MessageFormatter):
         """Formats and prints the message as markdown."""
         super().__init__(in_block, out_block)
         from rich.console import Console
-        self.in_block_console = Console(file=self.in_block)
         self.out_block_console = Console(file=self.out_block)
-
-    def print(self, console, message):
-        from rich.markdown import Markdown
-        markdown = Markdown(message)
-        console.print(markdown)
 
     def print_in_block(self, message: str):
         """Formats and prints the message as markdown."""
-        self.print(self.in_block_console, message)
+        self.in_block.write(message)
+        self.in_block.flush()
 
     def print_out_block(self, message: str):
-        self.print(self.out_block_console, message)
+        from rich.markdown import Markdown
+        markdown = Markdown(message)
+        self.out_block_console.print(markdown)
 
 def list_prompts(args):
     print("Available system prompts:")
