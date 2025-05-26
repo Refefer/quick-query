@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Generator
 from pathlib import Path
 import argparse
 import os
@@ -7,6 +7,7 @@ import requests
 import select
 import sys
 import tomllib
+import json
 
 def load_toml_file(
     file_path: str
@@ -148,49 +149,187 @@ def get_model_id(
 
     return None
 
-
 def send_chat_completion(
-    api_url: str,
+    host: str,
+    model: str,
     api_key: str,
-    model_id: str,
     messages: List[Dict[str, str]]
-) -> Optional[str]:
+) -> Generator[str, None, None]:
     """
-    Send a chat completion request to the API.
+    Streams responses from an OpenAI-compatible chat/completions endpoint in real-time.
+    Streams part of the data to stderr until a substring is found, then switches to stdout.
 
-    Args:
-        api_url: Base API URL
-        api_key: Authentication key
-        model_id: Model identifier
-        messages: Sequence of chat messages
+    Parameters:
+    url (str): The API endpoint URL of the server.
+    model (str): The model name to use for the request.
+    prompt (str): The input prompt for the model.
+    api_key (str): The API key for authentication.
+    switch_substring (str): The substring to trigger switching to stdout. Default is '</cot>'.
 
-    Returns:
-        Response content or None on failure
+    Yields:
+    Response object
     """
-    payload = {"model": model_id, "messages": messages}
-    result = api_request(
-        "POST",
-        f"{api_url}/chat/completions",
-        api_key,
-        json_payload=payload
-    )
-    if not result:
-        return None
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": model,
+        "messages": messages,
+        "stream": True
+    }
+    url = f"{host}/chat/completions"
+    return requests.post(url, headers=headers, json=data, stream=True)
 
-    try:
-        return result["choices"][0]["message"]["content"]
+def stream_chunks(response, min_chunk_size=None):
+    buffer = ''
+    for line in response.iter_lines():
+        if not line:
+            continue
 
-    except (KeyError, IndexError):
-        print("API Error: Unexpected response format")
-        return None
+        line_data = line.decode('utf-8')
+        if line_data.startswith('data: '):
+            content = line_data[6:]
+            if content == '[DONE]':
+                if buffer:
+                    yield buffer
+                break
 
-def try_read_stdin():
+            try:
+                json_data = json.loads(content)
+                chunk = json_data['choices'][0]['delta'].get('content', '')
+            except Exception as e:
+                print(f"Error parsing line: {e}")
+                sys.exit(1)
+
+            if min_chunk_size is None:
+                yield chunk
+            else:
+                buffer = chunk if len(buffer) == 0 else buffer + chunk
+                if len(buffer) >= min_chunk_size:
+                    yield buffer
+                    buffer = ''
+
+def create_prefixes(think_tag):
+    start_tag = f'<{think_tag}>'
+    end_tag = f'</{think_tag}>'
+    prefixes = set()
+    for tag in (start_tag, end_tag):
+        for i in range(1, len(tag) - 1):
+            prefixes.add(tag[:i])
+
+    return tuple(prefixes)
+
+def stream_tokens(
+    response, 
+    think_tag=None,
+    min_chunk_size=None
+):
+    stream = stream_chunks(response, min_chunk_size)
+    if think_tag is None:
+        yield from stream
+    else:
+        prefixes = create_prefixes(think_tag)
+        buffer = ''
+        for chunk in stream:
+            buffer = chunk if len(buffer) == 0 else buffer + chunk
+            if not buffer.endswith(prefixes):
+                yield buffer
+                buffer = ''
+
+        if len(buffer) > 0:
+            yield buffer
+
+def stream_cot_blocks(
+    response,
+    think_tag=None,
+    min_chunk_size=None
+):
+    stream = stream_tokens(response, think_tag, min_chunk_size)
+    if think_tag is None:
+        for c in stream:
+            yield False, c
+    else:
+        start_block, end_block = f'<{think_tag}>', f'</{think_tag}>'
+        in_block = False
+        for chunk in stream:
+            buffer = chunk
+            while buffer:
+                if start_block in buffer:
+                    before, after = chunk.split(start_block, 1)
+                    yield in_block, before
+                    in_block = True
+                    yield in_block, start_block
+                    buffer = after
+                    continue
+
+                if end_block in buffer:
+                    before, after = chunk.split(end_block, 1)
+                    yield in_block, before
+                    yield in_block, end_block
+                    in_block = False
+                    buffer = after
+                    continue
+
+                yield in_block, buffer
+                buffer = ''
+
+
+
+def try_read_stdin() -> str | None:
+    """Try to read from standard input without blocking.
+    
+    Uses select to check if input is available. Returns the input if available,
+    otherwise returns None.
+    """
+    # Check if stdin has data available using select
     if select.select([sys.stdin], [], [], 0)[0]:
+        # Read and return all available input from stdin
         return sys.stdin.read()
     else:
+        # No input available, return None
         return None
 
-def chat(args, model_id, messages, formatter):
+def process_stream(
+    response, 
+    cot_token, 
+    min_chunk_size, 
+    needs_buffering, 
+    formatter
+):
+    token_stream = stream_cot_blocks(response, cot_token, min_chunk_size)
+    if needs_buffering:
+        # Need to buffer it all since rich doesn't support streaming
+        response = ''.join(chunk for _, chunk in token_stream)
+        formatter.print(response)
+    else:
+        response = []
+        for in_block, chunk in token_stream:
+            response.append(chunk)
+            if in_block:
+                formatter.print_in_block(chunk)
+            else:
+                formatter.print_out_block(chunk)
+
+        response = ''.join(response)
+
+    return response 
+
+def get_formatter(args):
+    in_block_path = args.cot_block_fd
+    if args.format_markdown:
+        return MarkdownFormatter(in_block_path, sys.stdout)
+    else:
+        return RawTextFormatter(in_block_path, sys.stdout)
+
+def chat(
+    args, 
+    model_id, 
+    messages, 
+    cot_token, 
+    min_chunk_size=20
+):
+    formatter = get_formatter(args)
     orig_message_len = len(messages)
     try:
         while True:
@@ -208,17 +347,25 @@ def chat(args, model_id, messages, formatter):
                 messages
             )
 
-            if response:
-                formatter.print(strip_think(response, args.include_think))
-                print('=' * 10)
-                messages.append(
-                    {"role": "assistant", "content": response}
-                )
+            response = process_stream(response, cot_token, min_chunk_size, args.format_markdown, formatter)
+            messages.append({"role": "assistant", "content": response})
+            if not response.endswith('\n'):
+                print()
+
+            print('=' * 10)
 
     except (KeyboardInterrupt, EOFError):
         print("\nExiting chat.")
 
-def run_prompt(args, user_prompt, model_id, messages, formatter):
+
+def run_prompt(
+    args, 
+    user_prompt, 
+    model_id, 
+    messages, 
+    cot_token,
+    min_chunk_size = 20
+):
     prompt = args.prompt
     stdin_prompt = try_read_stdin()
     if stdin_prompt is not None:
@@ -228,44 +375,69 @@ def run_prompt(args, user_prompt, model_id, messages, formatter):
         prompt = f"{user_prompt}\n{prompt}"
 
     messages.append({"role": "user", "content": prompt})
+
     response = send_chat_completion(
         args.host,
         args.api_key,
         model_id,
         messages
     )
-    if response:
-        formatter.print(strip_think(response, args.include_think))
+
+    formatter = get_formatter(args)
+    process_stream(response, cot_token, min_chunk_size, args.format_markdown, formatter)
 
 class MessageFormatter:
-    def print(self, message: str):
+    def __init__(self, in_block, out_block):
+        if isinstance(in_block, str):
+            in_block = open(in_block, 'w')
+
+        self.in_block = in_block
+        if isinstance(in_block, str):
+            out_block = open(out_block, 'w')
+
+        self.out_block = out_block
+
+    def print_in_block(self, message: str):
         """Takes a message, formats it for terminal output, and prints it."""
-        raise NotImplementedError
+        raise NotImplementedError()
+
+    def print_out_block(self, message: str):
+        """Takes a message, formats it for terminal output, and prints it."""
+        raise NotImplementedError()
+
 
 class RawTextFormatter(MessageFormatter):
     """Formats messages as raw text."""
-    def print(self, message: str) -> None:
+    def print_in_block(self, message: str):
         """Prints the message as raw text."""
-        print(message)
+        self.in_block.write(message)
+        self.in_block.flush()
+
+    def print_out_block(self, message: str):
+        self.out_block.write(message)
+        self.out_block.flush()
 
 class MarkdownFormatter(MessageFormatter):
-    import_attempted = False
     """Formats messages as markdown using the rich library."""
-    def print(self, message: str) -> None:
-        """Formats and prints the message as markdown."""
-        try:
-            from rich.markdown import Markdown
-            from rich.console import Console
-        except ImportError:
-            if not self.import_attempted:
-                print("'Rich' library not installed. Reverting to regular text.", file=sys.stderr)
-                self.import_attempted = True
 
-            print(message)
-        else:
-            console = Console()
-            markdown = Markdown(message)
-            console.print(markdown)
+    def __init__(self, in_block, out_block):
+        """Formats and prints the message as markdown."""
+        super().__init__(in_block, out_block)
+        from rich.console import Console
+        self.in_block_console = Console(file=self.in_block)
+        self.out_block_console = Console(file=self.out_block)
+
+    def print(self, console, message):
+        from rich.markdown import Markdown
+        markdown = Markdown(message)
+        console.print(markdown)
+
+    def print_in_block(self, message: str):
+        """Formats and prints the message as markdown."""
+        self.print(self.in_block_console, messagE)
+
+    def print_out_block(self, message: str):
+        self.print(self.out_block_console, messagE)
 
 def main(args) -> None:
     """
@@ -315,21 +487,12 @@ def main(args) -> None:
             {"role": "system", "content": system_prompt}
         )
 
-    formatter = MarkdownFormatter() if args.format_markdown else RawTextFormatter()
+    cot_token = 'think'
     if args.chat:
-        chat(args, model_id, messages, formatter)
+        chat(args, model_id, messages, cot_token)
     else:
-        run_prompt(args, user_prompt, model_id, messages, formatter)
+        run_prompt(args, user_prompt, model_id, messages, cot_token)
         
-def strip_think(response, include_think):
-    if not include_think:
-        # Do not refactor this line of code.  The separation of strings is intentional
-        index = response.find('<' + '/think>')
-        index = response.find('>', index)
-        response = response[index+1:].strip()
-
-    return response
-
 CONFIG_DIR: Path = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "quick-query"
 SYSTEM_PROMPT_FILE: Path = CONFIG_DIR / "prompts.toml"
 USER_PROMPT_FILE: Path = CONFIG_DIR / "user_prompts.toml"
@@ -398,17 +561,6 @@ def parse_arguments() -> argparse.Namespace:
         help="Model identifier"
     )
     parser.add_argument(
-        "--include-think",
-        action="store_true",
-        help="Include <think> blocks. Otherwise strips them out."
-    )
-    parser.add_argument(
-        "-n",
-        "--no-think",
-        action="store_true",
-        help="Appends /nothink to the end of the prompt"
-    )
-    parser.add_argument(
         "-c",
         "--chat",
         action="store_true",
@@ -419,6 +571,11 @@ def parse_arguments() -> argparse.Namespace:
         "--format-markdown",
         action="store_true",
         help="If enabled, formats output for the terminal in markdown.  If the library isn't installed, prints as text"
+    )
+    parser.add_argument(
+        "--cot-block-fd",
+        default='/dev/tty',
+        help="Where to emit cot blocks.  Default is /dev/tty."
     )
 
     return parser.parse_args()
