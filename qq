@@ -274,20 +274,15 @@ def stream_cot_blocks(
                 yield in_block, buffer
                 buffer = ''
 
-
-
 def try_read_stdin() -> str | None:
     """Try to read from standard input without blocking.
     
     Uses select to check if input is available. Returns the input if available,
     otherwise returns None.
     """
-    # Check if stdin has data available using select
     if select.select([sys.stdin], [], [], 0)[0]:
-        # Read and return all available input from stdin
         return sys.stdin.read()
     else:
-        # No input available, return None
         return None
 
 def process_stream(
@@ -299,7 +294,6 @@ def process_stream(
 ):
     token_stream = stream_cot_blocks(response, cot_token, min_chunk_size)
     if needs_buffering:
-        # Need to buffer it all since rich doesn't support streaming
         response = ''.join(chunk for _, chunk in token_stream)
         formatter.print(response)
     else:
@@ -327,7 +321,7 @@ def chat(
     model_id, 
     messages, 
     cot_token, 
-    min_chunk_size=20
+    min_chunk_size = 20
 ):
     formatter = get_formatter(args)
     orig_message_len = len(messages)
@@ -356,7 +350,6 @@ def chat(
 
     except (KeyboardInterrupt, EOFError):
         print("\nExiting chat.")
-
 
 def run_prompt(
     args, 
@@ -434,10 +427,21 @@ class MarkdownFormatter(MessageFormatter):
 
     def print_in_block(self, message: str):
         """Formats and prints the message as markdown."""
-        self.print(self.in_block_console, messagE)
+        self.print(self.in_block_console, message)
 
     def print_out_block(self, message: str):
-        self.print(self.out_block_console, messagE)
+        self.print(self.out_block_console, message)
+
+def list_prompts(args):
+    print("Available system prompts:")
+    system_data = load_toml_file(args.system_prompt_file)
+    for key in system_data:
+        print(f"  {key}")
+
+    print("\nAvailable user prompts:")
+    user_data = load_toml_file(args.user_prompt_file)
+    for key in user_data:
+        print(f"  {key}")
 
 def main(args) -> None:
     """
@@ -497,6 +501,7 @@ CONFIG_DIR: Path = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config
 SYSTEM_PROMPT_FILE: Path = CONFIG_DIR / "prompts.toml"
 USER_PROMPT_FILE: Path = CONFIG_DIR / "user_prompts.toml"
 CONF_FILE: Path = CONFIG_DIR / "conf.toml"
+
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command-line arguments.
@@ -510,7 +515,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "-p",
         "--prompt",
-        required=not "-c" in sys.argv,
+        required=not "-c" in sys.argv and not '--list-prompts' in sys.argv,
         help="The user's prompt"
     )
     parser.add_argument(
@@ -577,8 +582,18 @@ def parse_arguments() -> argparse.Namespace:
         default='/dev/tty',
         help="Where to emit cot blocks.  Default is /dev/tty."
     )
+    parser.add_argument(
+        "--list-prompts",
+        action="store_true",
+        help="List all available system and user prompts and exit"
+    )
 
     return parser.parse_args()
 
 if __name__ == "__main__":
-    main(parse_arguments())
+    args = parse_arguments()
+    if args.list_prompts:
+        list_prompts(args)
+        sys.exit(0)
+
+    main(args)
