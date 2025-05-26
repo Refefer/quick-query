@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from typing import Optional, Dict, List, Any
+from pathlib import Path
 import argparse
 import os
 import requests
@@ -72,7 +73,6 @@ def load_toml_prompt(
     data = load_toml_file(file_path)
     section = data.get(section_name, {})
     return section.get("prompt")
-
 
 def build_headers(
     api_key: str
@@ -190,12 +190,15 @@ def try_read_stdin():
     else:
         return None
 
-def chat(args, model_id, messages):
+def chat(args, model_id, messages, formatter):
+    orig_message_len = len(messages)
     try:
         while True:
             user_input = input("> ").strip()
-            if user_input.lower() in ("exit", "quit"):
-                break
+            print('=' * 10)
+            if user_input.lower() == '/reset':
+                messages = messages[:orig_message_len]
+                continue
 
             messages.append({"role": "user", "content": user_input})
             response = send_chat_completion(
@@ -206,7 +209,8 @@ def chat(args, model_id, messages):
             )
 
             if response:
-                print("AI:", strip_think(response, args.include_think))
+                formatter.print(strip_think(response, args.include_think))
+                print('=' * 10)
                 messages.append(
                     {"role": "assistant", "content": response}
                 )
@@ -214,7 +218,7 @@ def chat(args, model_id, messages):
     except (KeyboardInterrupt, EOFError):
         print("\nExiting chat.")
 
-def run_prompt(args, user_prompt, model_id, messages):
+def run_prompt(args, user_prompt, model_id, messages, formatter):
     prompt = args.prompt
     stdin_prompt = try_read_stdin()
     if stdin_prompt is not None:
@@ -231,7 +235,37 @@ def run_prompt(args, user_prompt, model_id, messages):
         messages
     )
     if response:
-        print(strip_think(response, args.include_think))
+        formatter.print(strip_think(response, args.include_think))
+
+class MessageFormatter:
+    def print(self, message: str):
+        """Takes a message, formats it for terminal output, and prints it."""
+        raise NotImplementedError
+
+class RawTextFormatter(MessageFormatter):
+    """Formats messages as raw text."""
+    def print(self, message: str) -> None:
+        """Prints the message as raw text."""
+        print(message)
+
+class MarkdownFormatter(MessageFormatter):
+    import_attempted = False
+    """Formats messages as markdown using the rich library."""
+    def print(self, message: str) -> None:
+        """Formats and prints the message as markdown."""
+        try:
+            from rich.markdown import Markdown
+            from rich.console import Console
+        except ImportError:
+            if not self.import_attempted:
+                print("'Rich' library not installed. Reverting to regular text.", file=sys.stderr)
+                self.import_attempted = True
+
+            print(message)
+        else:
+            console = Console()
+            markdown = Markdown(message)
+            console.print(markdown)
 
 def main(args) -> None:
     """
@@ -281,10 +315,11 @@ def main(args) -> None:
             {"role": "system", "content": system_prompt}
         )
 
+    formatter = MarkdownFormatter() if args.format_markdown else RawTextFormatter()
     if args.chat:
-        chat(args, model_id, messages)
+        chat(args, model_id, messages, formatter)
     else:
-        run_prompt(args, user_prompt, model_id, messages)
+        run_prompt(args, user_prompt, model_id, messages, formatter)
         
 def strip_think(response, include_think):
     if not include_think:
@@ -295,23 +330,29 @@ def strip_think(response, include_think):
 
     return response
 
+CONFIG_DIR: Path = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "quick-query"
+SYSTEM_PROMPT_FILE: Path = CONFIG_DIR / "prompts.toml"
+USER_PROMPT_FILE: Path = CONFIG_DIR / "user_prompts.toml"
+CONF_FILE: Path = CONFIG_DIR / "conf.toml"
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command-line arguments.
 
     Returns:
-        argparse.Namespace of parsed arguments
+        argparse.Namespace: Parsed arguments.
     """
-    parser = argparse.ArgumentParser(description="Query an OpenAI-compatible endpoint")
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
+        description="Query an OpenAI-compatible endpoint"
+    )
     parser.add_argument(
         "-p",
         "--prompt",
-        required=not "--chat" in sys.argv,
+        required=not "-c" in sys.argv,
         help="The user's prompt"
     )
     parser.add_argument(
         "--system-prompt-file",
-        default=f"{os.environ['HOME']}/.config/quick-query/prompts.toml",
+        default=str(SYSTEM_PROMPT_FILE),
         help="Path to TOML file containing system prompts"
     )
     parser.add_argument(
@@ -322,7 +363,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--user-prompt-file",
-        default=f"{os.environ['HOME']}/.config/quick-query/user_prompts.toml",
+        default=str(USER_PROMPT_FILE),
         help="Path to TOML file containing user prompts"
     )
     parser.add_argument(
@@ -332,7 +373,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--conf-file",
-        default=f"{os.environ['HOME']}/.config/quick-query/conf.toml",
+        default=str(CONF_FILE),
         help="Path to TOML file containing configuration"
     )
     parser.add_argument(
@@ -359,7 +400,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--include-think",
         action="store_true",
-        help="Include <tool_response> blocks. Otherwise strips them out."
+        help="Include <think> blocks. Otherwise strips them out."
     )
     parser.add_argument(
         "-n",
@@ -373,8 +414,14 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Enter interactive chat mode"
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "-m",
+        "--format-markdown",
+        action="store_true",
+        help="If enabled, formats output for the terminal in markdown.  If the library isn't installed, prints as text"
+    )
 
+    return parser.parse_args()
 
 if __name__ == "__main__":
     main(parse_arguments())
