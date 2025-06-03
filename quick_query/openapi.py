@@ -107,11 +107,12 @@ def send_chat_completion(
     url = f"{host}/chat/completions"
     return requests.post(url, headers=headers, json=data, stream=True)
 
-def stream_response_chunks(response):
+def stream_response_chunks(response, think_tag):
     """
     Takes a streaming response and converts it into a generator yield the raw stream.
     """
     buffer = ''
+    in_think_tag = False
     for line in response.iter_lines():
         if not line:
             continue
@@ -124,28 +125,46 @@ def stream_response_chunks(response):
 
             try:
                 json_data = json.loads(content)
-                chunk = json_data['choices'][0]['delta'].get('content', '')
             except Exception as e:
                 print(f"Error parsing line: {e}")
                 sys.exit(1)
 
-            yield chunk
+                
+            delta = json_data['choices'][0]['delta']
+            reasoning_content = delta.get('reasoning_content')
+            content = delta.get('content', '') or ''
+
+            if reasoning_content is not None:
+                if not in_think_tag:
+                    yield f'<{think_tag}>'
+
+                in_think_tag = True
+                yield reasoning_content
+            else:
+                if in_think_tag:
+                    yield f'</{think_tag}>'
+
+                in_think_tag = False
+
+                yield content
 
 class OpenAIServer:
     def __init__(
         self,
         host: str,
         api_key: str,
-        model: str
+        model: str,
+        think_tag: str
     ):
         self.host = host
         self.api_key = api_key
         self.model = model
+        self.think_tag = think_tag
 
     def send_chat_completion(
         self, 
         messages
     ):
         response = send_chat_completion(self.host, self.api_key, self.model, messages)
-        return stream_response_chunks(response)
+        return stream_response_chunks(response, self.think_tag)
  

@@ -73,7 +73,7 @@ def setup_api_params(args):
             args.api_key
         )
 
-    return OpenAIServer(args.host, args.api_key, args.model)
+    return OpenAIServer(args.host, args.api_key, args.model, args.cot_token)
 
 class InitialState:
     def __init__(self, system_prompt, user_prompt, cli_prompt, stdin_prompt):
