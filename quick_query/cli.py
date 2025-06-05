@@ -12,6 +12,7 @@ from quick_query.streaming_response import StreamProcesser
 from quick_query.config import load_toml_file, load_toml_prompt, read_api_conf
 from quick_query.formatter import get_formatter
 from quick_query.prompter import run_prompt
+from quick_query.message import MessageProcessor
 
 def try_read_stdin() -> str | None:
     """Try to read from standard input without blocking.
@@ -97,11 +98,12 @@ def main(args) -> None:
         try_read_stdin(),
         args.prompt)
 
+    mp = MessageProcessor(args.re2)
     if args.chat:
-        chat(initial_state, server, stream_processer, formatter, needs_buffering=args.format_markdown)
+        chat(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
 
     else:
-        run_prompt(initial_state, server, stream_processer, formatter, needs_buffering=args.format_markdown)
+        run_prompt(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
         
 def parse_arguments() -> argparse.Namespace:
     """
@@ -198,6 +200,12 @@ def parse_arguments() -> argparse.Namespace:
         default="think",
         help="Specifies the tag name for chain-of-thought."
     )
+    parser.add_argument(
+        "--re2",
+        action="store_true",
+        help="If specified, uses re-think prompting."
+    )
+
     parser.add_argument(
         "--min-chunk-size",
         default=10,

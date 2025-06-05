@@ -1,6 +1,6 @@
 from quick_query.formatter import process_streaming_response
 
-def setup_messages(initial_state):
+def setup_messages(initial_state, mp):
     messages = []
     if initial_state.system_prompt:
         messages.append({"role": "system", "content": initial_state.system_prompt})
@@ -12,7 +12,7 @@ def setup_messages(initial_state):
     if initial_state.user_prompt:
         prompt = f"{initial_state.user_prompt}\n{prompt}"
 
-    messages.append({"role": "user", "content": prompt})
+    messages.append(mp.process_user_prompt(prompt))
     return messages
 
 
@@ -21,11 +21,12 @@ def run_prompt(
     server,
     stream_processer,
     formatter,
+    message_processor,
     needs_buffering
 ):
 
     # Build messages
-    messages = setup_messages(initial_state)
+    messages = setup_messages(initial_state, message_processor)
 
     # Get streaming response
     chunk_stream = server.send_chat_completion(messages)

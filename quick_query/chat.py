@@ -80,6 +80,7 @@ def chat(
     server,
     stream_processer,
     formatter,
+    message_processor,
     needs_buffering
 ):
     messages = setup_messages(initial_state)
@@ -88,7 +89,8 @@ def chat(
         while True:
             if len(messages) == 0 or messages[-1]['role'] != 'user':
                 user_input = get_user_input(messages, orig_message_len)
-                messages.append({"role": "user", "content": user_input})
+                message = message_processor.process_user_prompt(user_input)
+                messages.append(message)
 
             # Get streaming response
             chunk_stream = server.send_chat_completion(messages)
