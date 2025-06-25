@@ -77,11 +77,15 @@ def setup_api_params(args):
     return OpenAIServer(args.host, args.api_key, args.model, args.cot_token)
 
 class InitialState:
-    def __init__(self, system_prompt, user_prompt, cli_prompt, stdin_prompt):
+    def __init__(self, system_prompt, user_prompt, stdin_prompt, cli_prompt, prompt_file):
         self.system_prompt = system_prompt
         self.user_prompt = user_prompt
-        self.cli_prompt = cli_prompt
         self.stdin_prompt = stdin_prompt
+        self.cli_prompt = cli_prompt
+
+        if prompt_file is not None:
+            with open(prompt_file) as f:
+                self.cli_prompt = f.read()
 
 def main(args) -> None:
     """
@@ -96,7 +100,8 @@ def main(args) -> None:
         create_system_prompt(args),
         create_user_prompt(args),
         try_read_stdin(),
-        args.prompt)
+        args.prompt,
+        args.prompt_file)
 
     mp = MessageProcessor(args.re2)
     if args.chat:
@@ -120,12 +125,21 @@ def parse_arguments() -> argparse.Namespace:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Query an OpenAI-compatible endpoint"
     )
-    parser.add_argument(
+
+    group = parser.add_mutually_exclusive_group()
+
+    group.add_argument(
         "-p",
         "--prompt",
-        required=not "-c" in sys.argv and not '--list-prompts' in sys.argv,
         help="The user's prompt"
     )
+
+    group.add_argument(
+        "-f",
+        "--prompt-file",
+        help="Load the prompt from a file"
+    )
+
     parser.add_argument(
         "--system-prompt-file",
         default=str(system_prompt_file),
