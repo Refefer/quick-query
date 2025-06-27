@@ -13,7 +13,8 @@ setuptools.setup(
         "requests>=2.31"
     ],
     extras_require={
-        "markdown": ["rich"]
+        "markdown": ["rich"],
+        "template": ["Jinja2>=3.1"]
     },
     author="Andrew Stanton",
     author_email="refefer@gmail.com",

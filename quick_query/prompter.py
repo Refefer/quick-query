@@ -9,9 +9,6 @@ def setup_messages(initial_state, mp):
     if initial_state.stdin_prompt is not None:
         prompt = f"{prompt}\n\n{initial_state.stdin_prompt}".strip()
 
-    if initial_state.user_prompt:
-        prompt = f"{initial_state.user_prompt}\n{prompt}"
-
     messages.append(mp.process_user_prompt(prompt))
     return messages
 

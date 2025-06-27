@@ -25,16 +25,32 @@ def try_read_stdin() -> str | None:
     else:
         return None
 
-def list_prompts(args):
-    print("Available system prompts:")
-    system_data = load_toml_file(args.system_prompt_file)
-    for key in system_data:
-        print(f"  {key}")
+def hr_rule():
+    print("=" *20)
 
-    print("\nAvailable user prompts:")
-    user_data = load_toml_file(args.user_prompt_file)
-    for key in user_data:
-        print(f"  {key}")
+def list_settings(args):
+    if args.system_prompts:
+        print("Available system prompts:")
+        system_data = load_toml_file(args.system_prompt_file)
+        for name, d in system_data.items():
+            prompt = d['prompt']
+            print(f"Prompt Name: {name}")
+            hr_rule()
+            print(f"Content: {prompt}")
+            hr_rule()
+            print()
+
+    if args.models:
+        models = load_toml_file(args.conf_file)
+        for config_name, details in models.items():
+            print(f"Config: {config_name}")
+            for key, value in details.items():
+                if key == 'api_key':
+                    continue
+                print(f" -{key}: {value}")
+
+            hr_rule()
+            print()
 
 def create_system_prompt(args):
     system_prompt = None
@@ -47,16 +63,6 @@ def create_system_prompt(args):
             return
 
     return system_prompt
-
-def create_user_prompt(args):
-    user_prompt = None
-    if args.user_prompt_file and args.user_prompt_name:
-        user_prompt = load_toml_prompt(
-            args.user_prompt_file,
-            args.user_prompt_name
-        )
-
-    return user_prompt
 
 def setup_api_params(args):
     if args.host is None:
@@ -77,9 +83,8 @@ def setup_api_params(args):
     return OpenAIServer(args.host, args.api_key, args.model, args.cot_token)
 
 class InitialState:
-    def __init__(self, system_prompt, user_prompt, stdin_prompt, cli_prompt, prompt_file):
+    def __init__(self, system_prompt, stdin_prompt=None, cli_prompt=None, prompt_file=None):
         self.system_prompt = system_prompt
-        self.user_prompt = user_prompt
         self.stdin_prompt = stdin_prompt
         self.cli_prompt = cli_prompt
 
@@ -96,20 +101,44 @@ def main(args) -> None:
     stream_processer = StreamProcesser(args.cot_token, args.min_chunk_size)
     formatter = get_formatter(args.cot_block_fd, args.format_markdown)
 
-    initial_state = InitialState(
-        create_system_prompt(args),
-        create_user_prompt(args),
-        try_read_stdin(),
-        args.prompt,
-        args.prompt_file)
-
     mp = MessageProcessor(args.re2)
-    if args.chat:
-        chat(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
+    match args.mode:
+        case "chat":
+            initial_state = InitialState(create_system_prompt(args))
 
-    else:
-        run_prompt(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
-        
+            chat(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
+
+        case "template":
+            try:
+                import jinja2
+            except ImportError:
+                print("Jinja is not installed!")
+                sys.exit(1)
+
+            import quick_query.template as template
+            initial_state = InitialState(create_system_prompt(args))
+            if args.template_from_file is not None:
+                template_extractor = template.TemplateFileExtractor(args.template_from_file)
+            else:
+                template_extractor = template.TemplaterFromField(args.template_from_field)
+
+            if args.variables is not None:
+                var_stream = template.JsonArrayStreamer(args.variables)
+            else:
+                var_stream = template.JsonlStreamer(args.variables_from_file)
+
+            templater = template.Templater(args.output, args.concurrency)
+            templater.run(initial_state, server, stream_processer, mp, template_extractor, var_stream)
+
+        case _:
+            initial_state = InitialState(
+                create_system_prompt(args),
+                try_read_stdin(),
+                args.prompt,
+                args.prompt_file)
+
+            run_prompt(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
+
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command-line arguments.
@@ -119,25 +148,10 @@ def parse_arguments() -> argparse.Namespace:
     """
     config_dir = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "quick-query"
     system_prompt_file= config_dir / "prompts.toml"
-    user_prompt_file: Path = config_dir / "user_prompts.toml"
     conf_file: Path = config_dir / "conf.toml"
 
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Query an OpenAI-compatible endpoint"
-    )
-
-    group = parser.add_mutually_exclusive_group()
-
-    group.add_argument(
-        "-p",
-        "--prompt",
-        help="The user's prompt"
-    )
-
-    group.add_argument(
-        "-f",
-        "--prompt-file",
-        help="Load the prompt from a file"
     )
 
     parser.add_argument(
@@ -150,16 +164,6 @@ def parse_arguments() -> argparse.Namespace:
         "--system-prompt-name",
         default='default',
         help="Name of the system prompt section in the TOML file"
-    )
-    parser.add_argument(
-        "--user-prompt-file",
-        default=str(user_prompt_file),
-        help="Path to TOML file containing user prompts"
-    )
-    parser.add_argument(
-        "--user-prompt-name",
-        default=None,
-        help="Name of the user prompt section in the TOML file"
     )
     parser.add_argument(
         "--conf-file",
@@ -188,26 +192,16 @@ def parse_arguments() -> argparse.Namespace:
         help="Model identifier"
     )
     parser.add_argument(
-        "-c",
-        "--chat",
-        action="store_true",
-        help="Enter interactive chat mode"
-    )
-    parser.add_argument(
         "-m",
         "--format-markdown",
         action="store_true",
         help="If enabled, formats output for the terminal in markdown.  If the library isn't installed, prints as text"
     )
+
     parser.add_argument(
         "--cot-block-fd",
         default='/dev/tty',
         help="Where to emit cot blocks.  Default is /dev/tty."
-    )
-    parser.add_argument(
-        "--list-prompts",
-        action="store_true",
-        help="List all available system and user prompts and exit"
     )
     parser.add_argument(
         "--cot-token",
@@ -227,12 +221,102 @@ def parse_arguments() -> argparse.Namespace:
         help="Specifies the minimum characters to emit for stream."
     )
 
+    subparsers = parser.add_subparsers(
+        dest="mode", 
+        required=True, 
+        help="Which mode to run qq")
+
+    # Standard one prompt, one response piped to stdout
+    completion = subparsers.add_parser("completion", help="Performs a completion task.")
+
+    group = completion.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "-p",
+        "--prompt",
+        help="The user's prompt"
+    )
+
+    group.add_argument(
+        "-f",
+        "--prompt-file",
+        help="Load the prompt from a file"
+    )
+
+    # Interactive mode
+    chat = subparsers.add_parser("chat", help="Uses qq in interactive chat mode")
+
+    lister = subparsers.add_parser(
+        "list",
+        help="List details about the underlying configs"
+    )
+
+    lister.add_argument(
+        "--system-prompts",
+        action="store_true",
+        help="Lists system prompts currently configured"
+    )
+
+    lister.add_argument(
+        "--models",
+        action="store_true",
+        help="Lists the models configured on the system"
+    )
+
+    # Runs in template mode
+    template = subparsers.add_parser("template", help="Runs qq in template mode")
+
+    group = template.add_mutually_exclusive_group(required=True)
+
+    group.add_argument(
+        "--template-from-file",
+        dest="template_from_file",
+        help="File containing the jinja template."
+    )
+
+    group.add_argument(
+        "--template-from-field",
+        dest="template_from_field",
+        help="Reads the template from the specified field on the variables dictionary."
+    )
+
+    group = template.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--variables",
+        "-v",
+        default=None,
+        help="Inline JSON structure for jinja2 variables."
+    )
+
+    group.add_argument(
+        "--variables-from-file",
+        "-vj",
+        default=None,
+        help="Read variables from jsonl file.  If set to '-', reads from stdin "
+    )
+
+    template.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Where to output the results.  If omitted, writes to stdout.  Output format is in JSONL format with the following"
+             'keys: "prompt", "variables", "response"'
+    )
+
+    import multiprocessing
+    template.add_argument(
+        "-c",
+        "--concurrency",
+        default=multiprocessing.cpu_count(),
+        type=int,
+        help="Where to output the results.  If omitted, writes to stdout.  Output format is in JSONL format with the following"
+    )
+
     return parser.parse_args()
 
 def cli_entrypoint():
     args = parse_arguments()
-    if args.list_prompts:
-        list_prompts(args)
+    if args.mode == 'list':
+        list_settings(args)
         sys.exit(0)
 
     main(args)

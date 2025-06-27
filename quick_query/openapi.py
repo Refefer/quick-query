@@ -80,7 +80,8 @@ def send_chat_completion(
     host: str,
     api_key: str,
     model: str,
-    messages: List[Dict[str, str]]
+    messages: List[Dict[str, str]],
+    stream: bool = True
 ) -> Generator[str, None, None]:
     """
     Streams responses from an OpenAI-compatible chat/completions endpoint in real-time.
@@ -102,10 +103,10 @@ def send_chat_completion(
     data = {
         "model": model,
         "messages": messages,
-        "stream": True
+        "stream": stream
     }
     url = f"{host}/chat/completions"
-    return requests.post(url, headers=headers, json=data, stream=True)
+    return requests.post(url, headers=headers, json=data, stream=stream)
 
 def stream_response_chunks(response, think_tag):
     """
@@ -161,10 +162,8 @@ class OpenAIServer:
         self.model = model
         self.think_tag = think_tag
 
-    def send_chat_completion(
-        self, 
-        messages
-    ):
-        response = send_chat_completion(self.host, self.api_key, self.model, messages)
+    def send_chat_completion(self, messages, stream=True):
+        response = send_chat_completion(self.host, self.api_key, self.model, messages, stream)
         return stream_response_chunks(response, self.think_tag)
  
+

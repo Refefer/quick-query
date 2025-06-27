@@ -99,9 +99,6 @@ def get_user_input(messages, orig_message_len, commands):
 
 def construct_initial_user_prompt(initial_state):
     prompt = []
-    if initial_state.user_prompt:
-        prompt.append(initial_state.user_prompt)
-
     if initial_state.cli_prompt:
         prompt.append(initial_state.cli_prompt)
 
