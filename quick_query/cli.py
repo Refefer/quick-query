@@ -9,7 +9,7 @@ import sys
 from quick_query.openapi import OpenAIServer, get_model_id
 from quick_query.chat import chat
 from quick_query.streaming_response import StreamProcesser
-from quick_query.config import load_toml_file, load_toml_prompt, read_api_conf
+from quick_query.config import load_toml_file, load_toml_prompt, read_api_conf, load_tools_from_toml
 from quick_query.formatter import get_formatter
 from quick_query.prompter import run_prompt
 from quick_query.message import MessageProcessor
@@ -73,6 +73,8 @@ def setup_api_params(args):
         args.host = conf.get("host")
         args.api_key = args.api_key or conf.get("api_key")
         args.model = args.model or conf.get("model")
+        if args.structured_streaming is None:
+            args.structured_streaming = conf.get('structured_streaming', True)
 
     if args.model is None:
         args.model = get_model_id(
@@ -80,7 +82,11 @@ def setup_api_params(args):
             args.api_key
         )
 
-    return OpenAIServer(args.host, args.api_key, args.model, args.cot_token)
+    tools = None
+    if args.tools is not None:
+        tools = load_tools_from_toml(args.tools)
+
+    return OpenAIServer(args.host, args.api_key, args.model, args.cot_token, args.structured_streaming, tools)
 
 class InitialState:
     def __init__(self, system_prompt, stdin_prompt=None, cli_prompt=None, prompt_file=None):
@@ -177,6 +183,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Name of the server to connect to in conf.toml"
     )
     parser.add_argument(
+        "--tools",
+        dest="tools",
+        help="Loads a set of tools from a toml file."
+    )
+
+    parser.add_argument(
         "--host",
         default=None,
         help="API endpoint base URL"
@@ -190,6 +202,13 @@ def parse_arguments() -> argparse.Namespace:
         "--model",
         default=None,
         help="Model identifier"
+    )
+    parser.add_argument(
+        "--no-structured-streaming",
+        dest='structured_streaming',
+        default=None,
+        action="store_false",
+        help="Whether the model supports structured streaming."
     )
     parser.add_argument(
         "-m",

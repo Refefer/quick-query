@@ -1,7 +1,8 @@
 import os
 from typing import Optional, Dict, List, Any, Generator
-
 import tomllib
+
+from .tools import load_tools
 
 def load_toml_file(
     file_path: str
@@ -68,4 +69,8 @@ def load_toml_prompt(
     data = load_toml_file(file_path)
     section = data.get(section_name, {})
     return section.get("prompt")
+
+def load_tools_from_toml(file_path):
+    data = load_toml_file(file_path)
+    return load_tools(data)
 

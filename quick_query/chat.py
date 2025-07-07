@@ -1,5 +1,6 @@
 import readline
 from quick_query.formatter import process_streaming_response
+from .openapi import TagTypes
 
 class Command:
     cmd = None
@@ -143,7 +144,7 @@ def chat(
     commands = {cmd.cmd: cmd() for cmd in COMMANDS}
     try:
         while True:
-            if len(messages) == 0 or messages[-1]['role'] != 'user':
+            if len(messages) == 0 or messages[-1]['role'] not in ('user', 'tool'):
                 print('Commands:', ', '.join('/' + name for name in commands))
                 user_input = get_user_input(messages, orig_message_len, commands)
                 message = message_processor.process_user_prompt(user_input)
@@ -155,15 +156,22 @@ def chat(
             # Processes streaming response into cot blocks
             cot_stream = stream_processer.process_stream(chunk_stream)
 
-            # run the streaming results into our formatter for output
-            response = process_streaming_response(cot_stream, formatter, needs_buffering)
+            # Run the streaming results into our formatter for output
+            response = dict(process_streaming_response(cot_stream, formatter, needs_buffering))
+            # Check if there are tool calls
+            if TagTypes.Tool_calls in response:
+                tc = response[TagTypes.Tool_calls]
+                #messages.append({"role": "assistant", "tool_calls": [tc]})
+                response = server.process_tool_call(tc)
+                message = message_processor.process_tool_prompt(response)
+                messages.append(message)
+            else:
+                # Add the response message
+                messages.append({"role": "assistant", "content": response['content']})
+                if not messages[-1]['content'].endswith('\n'):
+                    print()
 
-            # Add the response message
-            messages.append({"role": "assistant", "content": response})
-            if not response.endswith('\n'):
-                print()
-
-            print('=' * 10)
+                print('=' * 10)
 
     except (KeyboardInterrupt, EOFError):
         print("\nExiting chat.")

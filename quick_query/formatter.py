@@ -1,4 +1,8 @@
+import json
+from itertools import groupby
 import sys
+
+from .openapi import TagTypes
 
 class MessageFormatter:
     def __init__(self, in_block, out_block):
@@ -59,26 +63,36 @@ def get_formatter(in_block_path, format_markdown):
 def process_streaming_response(
     cot_token_stream, 
     formatter,
-    needs_buffering, 
+    needs_buffering,
+    include_cot_in_message=False
 ):
-    response = []
-    if needs_buffering:
-        out_message = []
-        for in_block, chunk in cot_token_stream:
-            response.append(chunk)
-            if in_block:
-                formatter.print_in_block(chunk)
-            else:
-                out_message.append(chunk)
+    for tag_type, group in groupby(cot_token_stream, key=lambda x: x[0]):
+        # Space out between thinking and non thinking blocks
+        if tag_type == TagTypes.Content:
+            formatter.print_in_block('\n\n')
 
-        formatter.print_out_block(''.join(out_message))
-    else:
-        for in_block, chunk in cot_token_stream:
-            response.append(chunk)
-            if in_block:
-                formatter.print_in_block(chunk)
-            else:
-                formatter.print_out_block(chunk)
+        response = []
+        for i, (_, v) in enumerate(group):
+            response.append(v)
+            match tag_type:
+                case TagTypes.Reasoning:
+                    formatter.print_in_block(v)
+                case TagTypes.Content if not needs_buffering:
+                    formatter.print_out_block(v)
+                case _:
+                    pass
 
-    return ''.join(response)
+        if tag_type == TagTypes.Content and needs_buffering:
+            formatter.print_out_block(''.join(response))
+
+        if tag_type == TagTypes.Tool_calls:
+            tool_call = {"id": '', "name": '', "arguments": ""}
+            for v in response:
+                for k, v in json.loads(v).items():
+                    tool_call[k] += v
+
+            formatter.print_in_block(f'\n\n* Tool Call: {tool_call["name"]}({tool_call["arguments"]})\n')
+            yield tag_type, tool_call
+        else:
+            yield tag_type, ''.join(response)
 

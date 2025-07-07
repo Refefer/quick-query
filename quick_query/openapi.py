@@ -1,7 +1,15 @@
 from typing import Optional, Dict, List, Any, Generator
 import json
-
 import requests
+from itertools import groupby
+
+from .tools import Tool
+
+class TagTypes:
+    Reasoning = "reasoning_content"
+    Content = "content"
+    Tool_calls = "tool_calls"
+    Role = "role"
 
 def build_headers(
     api_key: str
@@ -81,7 +89,8 @@ def send_chat_completion(
     api_key: str,
     model: str,
     messages: List[Dict[str, str]],
-    stream: bool = True
+    tools: Optional[Dict[str, Tool]] = None,
+    stream: bool = True,
 ) -> Generator[str, None, None]:
     """
     Streams responses from an OpenAI-compatible chat/completions endpoint in real-time.
@@ -105,49 +114,77 @@ def send_chat_completion(
         "messages": messages,
         "stream": stream
     }
+
+    if tools is not None and len(tools) > 0:
+        data['tools'] = [tool.function_spec for tool in tools.values()]
+
     url = f"{host}/chat/completions"
     return requests.post(url, headers=headers, json=data, stream=stream)
 
-def stream_response_chunks(response, think_tag):
+def stream_deltas(response, stream):
     """
     Takes a streaming response and converts it into a generator yield the raw stream.
     """
-    buffer = ''
-    in_think_tag = False
     for line in response.iter_lines():
         if not line:
             continue
 
         line_data = line.decode('utf-8')
-        if line_data.startswith('data: '):
+        if stream and line_data.startswith('data: '):
             content = line_data[6:]
             if content == '[DONE]':
                 break
 
-            try:
-                json_data = json.loads(content)
-            except Exception as e:
-                print(f"Error parsing line: {e}")
-                sys.exit(1)
+            json_data = try_json(content)
+            yield json_data['choices'][0]['delta']
 
-                
-            delta = json_data['choices'][0]['delta']
-            reasoning_content = delta.get('reasoning_content')
-            content = delta.get('content', '') or ''
+        elif not stream:
+            json_data = try_json(line_data)
 
-            if reasoning_content is not None:
-                if not in_think_tag:
-                    yield f'<{think_tag}>'
+            for choice in json_data['choices']:
+                yield choice['message']
 
-                in_think_tag = True
-                yield reasoning_content
-            else:
-                if in_think_tag:
-                    yield f'</{think_tag}>'
+def try_json(content):
+    try:
+        return json.loads(content)
+    except Exception as e:
+        print(f"Error parsing line: {e}")
+        sys.exit(1)
 
-                in_think_tag = False
+def stream_response_chunks(response, stream):
+    """
+    Takes a streaming response and converts it into a generator yield the raw stream.
+    """
+    for delta in stream_deltas(response, stream):
+        for stream_type, value in delta.items():
+            if value is None:
+                continue
 
-                yield content
+            match stream_type:
+                case TagTypes.Tool_calls:
+                    tool_call = {}
+                    for tool_call_chunk in value:
+                        # Get the function id if available
+                        if 'id' in tool_call_chunk:
+                            tool_call['id'] = tool_call_chunk['id']
+
+                        func = tool_call_chunk['function']
+                        if 'name' in func:
+                            tool_call['name'] = func['name']
+
+                        if 'arguments' in func:
+                            tool_call['arguments'] = func['arguments']
+
+                    yield TagTypes.Tool_calls, json.dumps(tool_call)
+                        
+                case TagTypes.Reasoning | TagTypes.Content:
+                    yield stream_type, value
+
+                case TagTypes.Role:
+                    pass
+
+                case _:
+                    raise TypeError(f"Unknown stream type: '{stream_type}'")
 
 class OpenAIServer:
     def __init__(
@@ -155,15 +192,25 @@ class OpenAIServer:
         host: str,
         api_key: str,
         model: str,
-        think_tag: str
+        think_tag: str,
+        structured_stream: bool,
+        tools: Optional[Dict[str, Tool]]
     ):
         self.host = host
         self.api_key = api_key
         self.model = model
         self.think_tag = think_tag
+        self.structured_stream = structured_stream
+        self.tools = tools
 
-    def send_chat_completion(self, messages, stream=True):
-        response = send_chat_completion(self.host, self.api_key, self.model, messages, stream)
-        return stream_response_chunks(response, self.think_tag)
+    def send_chat_completion(self, messages):
+        stream = not self.tools or self.structured_stream
+        response = send_chat_completion(self.host, self.api_key, self.model, messages, self.tools, stream)
+        return stream_response_chunks(response, stream)
  
+    def process_tool_call(self, payload):
+        evaluation = self.tools[payload['name']].evaluate(payload)
+        payload['content'] = evaluation
+        payload['tool_call_id'] = payload['id']
+        return payload
 
