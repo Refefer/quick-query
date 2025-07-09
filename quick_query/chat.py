@@ -1,3 +1,4 @@
+import json
 import readline
 from quick_query.formatter import process_streaming_response
 from .openapi import TagTypes
@@ -26,7 +27,7 @@ class Save(Command):
         path = user_input[6:]
         with open(path, 'w') as out:
             for message in messages:
-                print(f"Role: {message['role']}\n{message['content']}\n", file=out)
+                print(json.dumps(message), file=out)
 
         print(f"Saved to {path}")
         return True
