@@ -183,6 +183,7 @@ def parse_arguments() -> argparse.Namespace:
         help="Name of the server to connect to in conf.toml"
     )
     parser.add_argument(
+        "-t", 
         "--tools",
         dest="tools",
         help="Loads a set of tools from a toml file."

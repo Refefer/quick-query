@@ -1,5 +1,6 @@
 import json
 import readline
+import pprint
 from quick_query.formatter import process_streaming_response
 from .openapi import TagTypes
 
@@ -30,6 +31,15 @@ class Save(Command):
                 print(json.dumps(message), file=out)
 
         print(f"Saved to {path}")
+        return True
+
+class Pretty(Command):
+    cmd = "pretty"
+
+    def process(self, user_input, messages, buffer, orig_message_len):
+        for message in messages:
+            pprint.pprint(message)
+
         return True
 
 class Redo(Command):
@@ -129,6 +139,7 @@ COMMANDS = [
     Save,
     Undo,
     Redo,
+    Pretty,
     Multiline
 ]
 def chat(

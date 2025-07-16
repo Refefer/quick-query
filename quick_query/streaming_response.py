@@ -72,12 +72,12 @@ def split_cot_to_reasoning(chunk_stream, cot_tag):
                 yield new_st, b
                 b = ''
 
-            if b:
-                yield TagTypes.Content, b
-
         else:
             yield st, chunk
 
+    if b:
+        new_st = TagTypes.Reasoning if in_reasoning else TagTypes.Content
+        yield new_st, b
 
 class StreamProcesser:
     def __init__(self, think_tag, min_chunk_size=0):

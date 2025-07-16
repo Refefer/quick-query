@@ -134,16 +134,28 @@ def load_module(tool_type: str, path: str):
             raise TypeError(f"No tool type {tool_type} known!")
 
 class Tool:
-    def __init__(self, entrypoint):
+    def __init__(self, entrypoint, method=None, name=None):
         self.entrypoint = entrypoint
-        self.name, self.function_spec = make_tool_metadata(entrypoint)
+        self.method = method
+        if self.method is None:
+            self.name, self.function_spec = make_tool_metadata(entrypoint)
+        else:
+            method = getattr(self.entrypoint, self.method)
+            self.name, self.function_spec = make_tool_metadata(method)
+
+        # We override names from the spec if provided.
+        if name is not None:
+            self.name = name
 
     def evaluate(self, payload):
         if self.name != payload['name']:
             raise TypeError("Function name doesn't match payload!")
 
         kwargs = json.loads(payload['arguments'])
-        return self.entrypoint(**kwargs)
+        if self.method is None:
+            return self.entrypoint(**kwargs)
+        else:
+            return getattr(self.entrypoint, self.method)(**kwargs)
 
 def load_tools(tools: typing.Dict[str, dict]):
     tools_mapping = {}
@@ -151,15 +163,31 @@ def load_tools(tools: typing.Dict[str, dict]):
         tool_type  = spec['type']
         path       = spec['path']
         entrypoint = spec['entrypoint']
-        init_args = json.loads(spec.get('init_args', '{}').strip())
 
         # load the module
         module = load_module(tool_type, path)
-        ep = getattr(module, entrypoint)
-        if isinstance(ep, type):
+
+        # Check if we're accessing a class method
+        if '.' in entrypoint:
+            cls, entrypoint = entrypoint.split('.', 1)
+            ep = getattr(module, cls)
+            init_args = spec.get('arguments')
+            if init_args is None:
+                init_args = {}
+            elif isinstance(init_args, str):
+                init_args = json.loads(init_args)
+            elif isinstance(init_args, dict):
+                pass
+            else:
+                raise TypeError(f"Bad 'arguments' passed in for tool {tool_name}!")
+
             ep = ep(**init_args)
 
-        tool = Tool(ep)
+            tool = Tool(ep, method=entrypoint, name=tool_name)
+        else:
+            ep = getattr(module, cls)
+            tool = Tool(ep, name=tool_name)
+
         tools_mapping[tool.name] = tool
 
     return tools_mapping
