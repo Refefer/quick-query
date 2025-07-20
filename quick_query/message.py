@@ -11,11 +11,31 @@ class MessageProcessor:
 
         return {"role": "user", "content": prompt}
 
-    def process_tool_prompt(self, payload):
+    def process_tool_response(self, payload):
         if not all(k in payload for k in ('id', 'content', 'name')):
             raise TypeError("Tool processed payload incorrectly!")
 
         return {"role": "tool",  
+                "name": payload['name'],
                 "tool_call_id": payload['id'],
                 "content": json.dumps(payload['content'])
                 }
+
+    def process_tool_request(self, payload):
+        print(payload)
+        if not all(k in payload for k in ('id', 'name', 'arguments')):
+            raise TypeError("Tool processed payload incorrectly!")
+
+        return {
+            "role": "assistant", 
+            "content": None, 
+            "tool_calls": [{
+                "id": payload['id'],
+                "type": "function",
+                "function": {
+                    "name": payload['name'],
+                    "arguments": payload['arguments']
+                }
+            }]
+        }
+

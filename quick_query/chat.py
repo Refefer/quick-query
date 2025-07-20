@@ -173,9 +173,9 @@ def chat(
             # Check if there are tool calls
             if TagTypes.Tool_calls in response:
                 tc = response[TagTypes.Tool_calls]
-                #messages.append({"role": "assistant", "tool_calls": [tc]})
+                messages.append(message_processor.process_tool_request(tc))
                 response = server.process_tool_call(tc)
-                message = message_processor.process_tool_prompt(response)
+                message = message_processor.process_tool_response(response)
                 messages.append(message)
             else:
                 # Add the response message
