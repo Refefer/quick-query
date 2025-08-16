@@ -6,10 +6,12 @@ from itertools import groupby
 from .tools import Tool
 
 class TagTypes:
-    Reasoning = "reasoning_content"
+    ReasoningContent = "reasoning_content"
+    Reasoning = "reasoning"
     Content = "content"
     Tool_calls = "tool_calls"
     Role = "role"
+    ReasoningDetails = "reasoning_details"
 
 def build_headers(
     api_key: str
@@ -177,10 +179,18 @@ def stream_response_chunks(response, stream):
 
                     yield TagTypes.Tool_calls, json.dumps(tool_call)
                         
-                case TagTypes.Reasoning | TagTypes.Content:
-                    yield stream_type, value
+                case TagTypes.Reasoning:
+                    if len(value) > 0:
+                        yield stream_type, value
 
-                case TagTypes.Role:
+                case TagTypes.Content:
+                    if len(value) > 0:
+                        yield stream_type, value
+
+                case TagTypes.ReasoningContent:
+                    yield TagTypes.Reasoning, value
+
+                case TagTypes.Role | TagTypes.ReasoningDetails:
                     pass
 
                 case _:

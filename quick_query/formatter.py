@@ -91,7 +91,7 @@ def process_streaming_response(
                 for k, v in json.loads(v).items():
                     tool_call[k] += v
 
-            formatter.print_in_block(f'\n\n* Tool Call: {tool_call["name"]}({tool_call["arguments"]})\n')
+            formatter.print_in_block(f'\n\n* Tool Call: {tool_call["name"]}\n')
             yield tag_type, tool_call
         else:
             yield tag_type, ''.join(response)
