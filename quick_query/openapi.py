@@ -127,15 +127,18 @@ def stream_deltas(response, stream):
     """
     Takes a streaming response and converts it into a generator yield the raw stream.
     """
+    stop = False
     for line in response.iter_lines():
-        if not line:
+        print(line)
+        if stop or not line:
             continue
 
         line_data = line.decode('utf-8')
         if stream and line_data.startswith('data: '):
             content = line_data[6:]
             if content == '[DONE]':
-                break
+                stop = True
+                continue
 
             json_data = try_json(content)
             yield json_data['choices'][0]['delta']

@@ -1,8 +1,26 @@
+import sys
 import os
-from typing import Optional, Dict, List, Any, Generator
+from typing import Optional, Dict, List, Any, Generator, Mapping
 import tomllib
 
 from .tools import load_tools
+
+def expand_str(val: str) -> str:
+    """Expand $VAR, ${VAR} and %VAR% in a single string."""
+    return os.path.expandvars(val)
+
+def expand_env(obj: Any) -> Any:
+    """Recursively walk a TOML‑decoded object and expand strings."""
+    if isinstance(obj, Mapping):
+        return {k: expand_env(v) for k, v in obj.items()}
+
+    if isinstance(obj, list):
+        return [expand_env(v) for v in obj]
+
+    if isinstance(obj, str):
+        return expand_str(obj)
+
+    return obj  # numbers, bools, None
 
 def load_toml_file(
     file_path: str
@@ -23,16 +41,15 @@ def load_toml_file(
 
     try:
         with open(path, "rb") as f:
-            return tomllib.load(f)
+            return expand_env(tomllib.load(f))
 
     except tomllib.TOMLDecodeError:
-        print(f"Error: Invalid TOML format in {path}")
+        print(f"Error: Invalid TOML format in {path}", file=sys.stderr)
         return {}
 
-
-def read_api_conf(
+def read_model(
     config_path: str,
-    namespace: Optional[str]
+    model: Optional[str]
 ) -> Dict[str, Any]:
     """
     Read API configuration from a TOML file for a given namespace.
@@ -45,9 +62,11 @@ def read_api_conf(
         Dict of configuration values
     """
     conf = load_toml_file(config_path)
-    ns = namespace or "default"
-    return conf.get(ns, {})
-
+    models = conf['models']
+    model = models[model or "default"]
+    credentials = conf['credentials'][model['credentials']]
+    model['credentials'] = credentials
+    return model
 
 def load_toml_prompt(
     file_path: str,
@@ -70,7 +89,7 @@ def load_toml_prompt(
     section = data.get(section_name, {})
     return section.get("prompt")
 
-def load_tools_from_toml(file_path):
+def load_tools_from_toml(tool_mapping, file_path):
     data = load_toml_file(file_path)
-    return load_tools(data)
+    return load_tools(tool_mapping, data)
 
