@@ -18,9 +18,9 @@ pip install quick-query
 ```
 
 #### Optional extras
-* `markdown` — install the optional markdown formatter (`pip install "quick-query[markdown]"`).
-* `jinja` — needed for the *template* mode (`pip install "quick-query[jinja]"`).
-* `all` — install everything (`pip install "quick-query[all]"`).
+* `markdown` — install the optional markdown formatter (`pip install "quick-query[markdown]"`).
+* `jinja` — needed for the *template* mode (`pip install "quick-query[jinja]"`).
+* `all` — install everything (`pip install "quick-query[all]"`).
 
 ### Using `pipx` (isolated, globally‑available CLI)
 `pipx` creates an isolated virtual‑environment for the command while keeping the executable on your `PATH`.
@@ -37,15 +37,15 @@ quick‑query expects two TOML files placed under ``$XDG_CONFIG_HOME/quick-query
 
 | File | Purpose | Example location |
 |------|---------|-------------------|
-| `conf.toml` | Server definitions, model IDs, credentials, and optional tool specifications. | `examples/conf.toml` |
+| `conf.toml` | Profile definitions, model IDs, credentials, and optional tool specifications. | `examples/conf.toml` |
 | `prompts.toml` | Named system prompts that can be selected with `--system-prompt-name`. | `examples/prompts.toml` |
 
 ### Minimal `conf.toml`
 ```toml
-[default]
+[profile.default]
 model = "gpt-4o-mini"
 
-[default.credentials]
+[profile.default.credentials]
 host = "https://openrouter.ai/api/v1"
 api_key = "YOUR_API_KEY"
 ```
@@ -56,7 +56,7 @@ api_key = "YOUR_API_KEY"
 prompt = "You are a helpful assistant."
 ```
 
-Both files can contain multiple sections (e.g., `[openrouter]`, `[cerebras]`).  Choose the desired section with `--server` and `--system-prompt-name`.
+Both files can contain multiple sections (e.g., `[openrouter]`, `[cerebras]`).  Choose the desired section with `--profile` and `--system-prompt-name`.
 
 ---
 
@@ -78,7 +78,7 @@ These flags are available for **all** modes (including `list`).  The defaults sh
 | `--system-prompt-file` | Path to the TOML file containing system prompts (default: `$XDG_CONFIG_HOME/quick-query/prompts.toml` or `~/.config/quick-query/prompts.toml`). |
 | `-sp, --system-prompt-name` | Name of the system‑prompt section in the TOML file (default: `default`). |
 | `--conf-file` | Path to the TOML file containing server configuration (default: `$XDG_CONFIG_HOME/quick-query/conf.toml` or `~/.config/quick-query/conf.toml`). |
-| `-s, --server` | Name of the server configuration section in `conf.toml` (default: `default`). |
+| `-s, --profile` | Name of the profile configuration section in `conf.toml` (default: `default`). |
 | `-t, --tools` | Loads a set of tools from a TOML file (default: none). |
 | `-m, --format-markdown` | When set, formats output as markdown; otherwise plain text (default: disabled). |
 | `--cot-block-fd` | File descriptor where chain‑of‑thought (CoT) blocks are emitted (default: `/dev/tty`). |
@@ -121,7 +121,7 @@ qq chat \
 Enter a REPL where each line you type is sent to the model and the streamed answer is displayed. Use `Ctrl‑D` (EOF) to exit.
 
 #### Chat‑specific flags
-> Chat does not introduce any flags that are not already available in the other modes; it relies entirely on the common set of options (system prompt, server selection, formatting, etc.).
+> Chat does not introduce any flags that are not already available in the other modes; it relies entirely on the common set of options (system prompt, profile selection, formatting, etc.).
 
 ---
 
@@ -151,17 +151,17 @@ qq template \
 ---
 
 ## 4. List configuration
-> **Purpose:** Quickly inspect the currently available system prompts or model configurations without running a query.
+> **Purpose:** Quickly inspect the currently available system prompts or profile configurations without running a query.
 ```bash
 qq list --system-prompts   # shows all prompts in prompts.toml
-qq list --models           # shows all server sections in conf.toml
+qq list --profiles         # shows all profile sections in conf.toml
 ```
 
 #### List‑specific flags (only these apply to the `list` mode)
 | Flag | Description |
 |------|-------------|
 | `--system-prompts` | Display every system prompt defined in the prompts TOML file. |
-| `--models` | Display the model configurations (excluding secret `api_key`). |
+| `--profiles` | Display the profile configurations (excluding secret `api_key`). |
 
 ---
 
@@ -206,7 +206,7 @@ Now you can publish a new version with, for example:
 
 ## License
 
-quick‑query is dual‑licensed under the **MIT** and **Apache‑2.0** licenses.  See the `LICENSE` files in the repository for full terms.
+quick‑query is dual‑licensed under the **MIT** and **Apache 2.0** licenses.  See the `LICENSE` files in the repository for full terms.
 
 ---
 

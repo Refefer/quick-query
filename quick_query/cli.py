@@ -40,9 +40,9 @@ def list_settings(args):
             hr_rule()
             print()
 
-    if args.models:
-        models = load_toml_file(args.conf_file)
-        for config_name, details in models.items():
+    if args.profiles:
+        profiles = load_toml_file(args.conf_file)
+        for config_name, details in profiles.items():
             print(f"Config: {config_name}")
             for key, value in details.items():
                 if key == 'api_key':
@@ -67,7 +67,7 @@ def create_system_prompt(args):
 def setup_api_params(args):
     conf = read_model(
         args.conf_file,
-        args.server
+        args.profile
     )
     creds = conf['credentials']
     host = creds['host']
@@ -189,9 +189,9 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "-s",
-        dest="server",
+        dest="profile",
         default="default",
-        help="Name of the server to connect to in conf.toml"
+        help="Name of the profile to connect to in conf.toml"
     )
     parser.add_argument(
         "-t", 
@@ -266,9 +266,10 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     lister.add_argument(
-        "--models",
+        "--profiles",
+        dest="profiles",
         action="store_true",
-        help="Lists the models configured on the system"
+        help="Lists the profiles configured on the system"
     )
 
     # Runs in template mode

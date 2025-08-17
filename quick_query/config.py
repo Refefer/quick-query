@@ -52,21 +52,24 @@ def read_model(
     model: Optional[str]
 ) -> Dict[str, Any]:
     """
-    Read API configuration from a TOML file for a given namespace.
+    Read API configuration from a TOML file for a given profile.
 
     Args:
         config_path: Path to the configuration file
-        namespace: Section name in the TOML file
+        model: Name of the profile (section) to retrieve; defaults to "default".
 
     Returns:
         Dict of configuration values
     """
     conf = load_toml_file(config_path)
-    models = conf['models']
-    model = models[model or "default"]
-    credentials = conf['credentials'][model['credentials']]
-    model['credentials'] = credentials
-    return model
+    # The top‑level key is now "profile" instead of "models"
+    profiles = conf.get('profile', {})
+    if not profiles:
+        raise KeyError("No 'profile' section found in configuration file")
+    selected = profiles[model or "default"]
+    credentials = conf['credentials'][selected['credentials']]
+    selected['credentials'] = credentials
+    return selected
 
 def load_toml_prompt(
     file_path: str,

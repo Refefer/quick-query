@@ -1,10 +1,10 @@
 # Put in $HOME/.config/quick_query/conf.toml
 
-[models.default]
+[profile.default]
 credentials = "local"
 tools = "$HOME/.config/quick-query/tools.toml" 
 
-[models.o4mini]
+[profile.o4mini]
 credentials = "openai"
 model = 'o4-mini'
 
