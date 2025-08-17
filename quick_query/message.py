@@ -22,7 +22,6 @@ class MessageProcessor:
                 }
 
     def process_tool_request(self, payload):
-        print(payload)
         if not all(k in payload for k in ('id', 'name', 'arguments')):
             raise TypeError("Tool processed payload incorrectly!")
 

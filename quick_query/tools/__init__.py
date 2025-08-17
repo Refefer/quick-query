@@ -134,7 +134,7 @@ def load_module(tool_type: str, path: str):
             raise TypeError(f"No tool type {tool_type} known!")
 
 class Tool:
-    def __init__(self, entrypoint, method=None, name=None):
+    def __init__(self, entrypoint, method=None, name=None, enabled=False):
         self.entrypoint = entrypoint
         self.method = method
         if self.method is None:
@@ -147,6 +147,8 @@ class Tool:
         if name is not None:
             self.name = name
 
+        self.enabled = enabled
+
     def evaluate(self, payload):
         if self.name != payload['name']:
             raise TypeError("Function name doesn't match payload!")
@@ -157,11 +159,17 @@ class Tool:
         else:
             return getattr(self.entrypoint, self.method)(**kwargs)
 
+    def __repr__(self):
+        return f"Tool(name={self.name}, enabled={self.enabled})"
+
+    __str__ = __repr__
+
 def load_tools(tools_mapping: typing.Mapping, tools: typing.Dict[str, dict]):
     for spec in tools['tool']:
         tool_type  = spec['type']
         path       = spec['path']
         entrypoints = spec['entrypoints']
+        enabled = spec.get('enabled', True)
         
         # load the module
         module = load_module(tool_type, path)
@@ -186,12 +194,13 @@ def load_tools(tools_mapping: typing.Mapping, tools: typing.Dict[str, dict]):
 
                 ep = ep(**init_args)
 
-                tool = Tool(ep, method=method, name=tool_name)
+                tool = Tool(ep, method=method, name=tool_name, enabled=enabled)
             else:
                 ep = getattr(module, method)
-                tool = Tool(ep, name=tool_name)
+                tool = Tool(ep, name=tool_name, enabled=enabled)
 
-        tools_mapping[tool.name] = tool
+            print(f"Loaded: {tool}'")
+            tools_mapping[tool.name] = tool
 
     return tools_mapping
 

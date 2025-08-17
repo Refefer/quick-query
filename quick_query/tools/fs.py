@@ -57,12 +57,13 @@ class FileSystem:
         try:
             with open(self.resolve_path(path)) as f:
                 return {"success": True, "content": f.read()}
+
         except Exception as e:
             return {"success": False, "error": e.__class__.__name__}
 
     def write_file(self, path: str, contents: str) -> Dict[str, Any]: 
         """
-        Write contents to a file.
+        Write contents to a file.  Always confirm with user prior to calling it.
 
         Parameters:
             path: str - Relative path of the file to write.
@@ -76,12 +77,13 @@ class FileSystem:
             with open(self.resolve_path(path), "w") as out:
                 out.write(contents)
                 return {"success": True, "content": True}
+
         except Exception as e:
             return {"success": False, "error": e.__class__.__name__}
 
     def list_files(self, path: str) -> Dict[str, Any]:
         """
-        List entries in a directory.
+        List all entries in a directory.
 
         Parameters:
             path: str - Relative path to the directory.
@@ -102,6 +104,25 @@ class FileSystem:
                     }
                 )
             return {"success": True, "content": files}
+
+        except Exception as e:
+            return {"success": False, "error": e.__class__.__name__}
+
+    def delete_file(self, path: str) -> Dict[str, Any]:
+        """
+        Deletes a file in a directory.  Always confirm with user prior to deletion.
+
+        Parameters:
+            path: str - Relative path to the file.
+
+        Returns:
+            dict - {"success": True} on success,
+                    {"success": False, "error": str} on failure.
+        """
+        try:
+            path = self.resolve_path(path)
+            path.unlink()
+            return {"success": True}
 
         except Exception as e:
             return {"success": False, "error": e.__class__.__name__}

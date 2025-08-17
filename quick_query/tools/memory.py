@@ -40,7 +40,7 @@ class Memory:
 
     def list_memories(self) -> List[str]:
         """
-        Returns a list of all memory names stored.  
+        Returns a list of all memories stored.
 
         Memories are used to store information about the user, interests, preferences, or 
         other information that is helpful for an AI agent to know.  
@@ -53,13 +53,13 @@ class Memory:
         return cursor.fetchall()
 
 
-    def write_memory(
+    def add_memory(
         self,
         name: str,
         content: str
     ) -> None:
         """
-        Write a new memory or overwrite an existing one with the given name and content.  
+        Adds a new memory or overwrite an existing one with the given name and content.  
         Memories are used to store information about the user, interests, preferences, or 
         other information that is helpful for an AI agent to know.  
 

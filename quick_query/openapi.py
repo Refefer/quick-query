@@ -117,8 +117,10 @@ def send_chat_completion(
         "stream": stream
     }
 
-    if tools is not None and len(tools) > 0:
-        data['tools'] = [tool.function_spec for tool in tools.values()]
+    if tools is not None:
+        enabled_tools = [tool.function_spec for tool in tools.values() if tool.enabled]
+        if len(enabled_tools) > 0:
+            data['tools'] = enabled_tools
 
     url = f"{host}/chat/completions"
     return requests.post(url, headers=headers, json=data, stream=stream)
