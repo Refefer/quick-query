@@ -129,7 +129,6 @@ def stream_deltas(response, stream):
     """
     stop = False
     for line in response.iter_lines():
-        print(line)
         if stop or not line:
             continue
 

@@ -157,9 +157,9 @@ class Tool:
         else:
             return getattr(self.entrypoint, self.method)(**kwargs)
 
-def load_tools(tool_mapping: typing.Mapping, tools: typing.Dict[str, dict]):
+def load_tools(tools_mapping: typing.Mapping, tools: typing.Dict[str, dict]):
     for tool_name, spec in tools.items():
-        if tool_name in tool_mapping:
+        if tool_name in tools_mapping:
             raise KeyError(f"Tool '{tool_name}' has already been specified!")
 
         tool_type  = spec['type']
