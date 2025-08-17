@@ -167,7 +167,8 @@ def parse_arguments() -> argparse.Namespace:
     conf_file: Path = config_dir / "conf.toml"
 
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        description="Query an OpenAI-compatible endpoint"
+        description="Query an OpenAI-compatible endpoint",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     parser.add_argument(
