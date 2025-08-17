@@ -18,9 +18,9 @@ pip install quick-query
 ```
 
 #### Optional extras
-* `markdown` — install the optional markdown formatter (`pip install "quick-query[markdown]"`).
-* `jinja` — needed for the *template* mode (`pip install "quick-query[jinja]"`).
-* `all` — install everything (`pip install "quick-query[all]"`).
+* `markdown` — install the optional markdown formatter (`pip install "quick-query[markdown]"`).
+* `jinja` — needed for the *template* mode (`pip install "quick-query[jinja]"`).
+* `all` — install everything (`pip install "quick-query[all]"`).
 
 ### Using `pipx` (isolated, globally‑available CLI)
 `pipx` creates an isolated virtual‑environment for the command while keeping the executable on your `PATH`.
@@ -164,6 +164,45 @@ qq list --models           # shows all server sections in conf.toml
 | `--models` | Display the model configurations (excluding secret `api_key`). |
 
 ---
+
+## Development / Release
+
+The project now builds with **PEP 517** via a `pyproject.toml`.  To create a source distribution and a wheel locally, run:
+
+```bash
+python -m build .
+```
+
+The repository includes a helper script **`publish.sh`** that automates the full release cycle:
+
+| Command | What it does |
+|---------|--------------|
+| `./publish.sh clean` | Remove previous build artefacts (`build/`, `dist/`, `*.egg-info`). |
+| `./publish.sh bump [patch|minor|major]` | Increment the version stored in the `VERSION` file, commit the change, and tag the commit (`vX.Y.Z`). |
+| `./publish.sh build` | Run `python -m build` to produce `dist/*.tar.gz` and `dist/*.whl`. |
+| `./publish.sh upload` | Upload the contents of `dist/` to PyPI using **twine**.  It reads credentials from `TWINE_USERNAME`/`TWINE_PASSWORD` or `TWINE_API_TOKEN`. |
+| `./publish.sh release [patch|minor|major]` | Executes **clean → bump → build → upload** in one step. |
+
+Make the script executable once:
+
+```bash
+chmod +x publish.sh
+```
+
+Before uploading, ensure the required tools are installed and your PyPI token is set:
+
+```bash
+pip install --upgrade build twine
+export TWINE_API_TOKEN="pypi-<your-token>"
+```
+
+Now you can publish a new version with, for example:
+
+```bash
+./publish.sh release minor
+```
+
+--- 
 
 ## License
 

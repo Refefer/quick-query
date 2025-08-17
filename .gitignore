@@ -1,0 +1,58 @@
+# Byte‑compiled / optimized Python files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+/.eggs/
+*.egg
+*.egg-info/
+/dist/
+/build/
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+*.db
+
+# PyInstaller
+*.manifest
+*.spec
+
+# IDE / editor folders
+.vscode/
+.idea/
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# Local env files
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# MacOS metadata
+.DS_Store
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
