@@ -1,0 +1,18 @@
+# Put in $HOME/.config/quick_query/conf.toml
+
+[models.default]
+credentials = "local"
+tools = "$HOME/.config/quick-query/tools.toml" 
+
+[models.o4mini]
+credentials = "openai"
+model = 'o4-mini'
+
+[credentials.local]
+host = "http://localhost:12345/v1"
+api_key = "none"
+
+[credentials.openai]
+host = "https://api.openai.com/v1"
+api_key = "$OPENAI_API_KEY"
+model = 'o4-mini'

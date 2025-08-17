@@ -158,37 +158,38 @@ class Tool:
             return getattr(self.entrypoint, self.method)(**kwargs)
 
 def load_tools(tools_mapping: typing.Mapping, tools: typing.Dict[str, dict]):
-    for tool_name, spec in tools.items():
-        if tool_name in tools_mapping:
-            raise KeyError(f"Tool '{tool_name}' has already been specified!")
-
+    for spec in tools['tool']:
         tool_type  = spec['type']
         path       = spec['path']
-        entrypoint = spec['entrypoint']
-
+        entrypoints = spec['entrypoints']
+        
         # load the module
         module = load_module(tool_type, path)
 
-        # Check if we're accessing a class method
-        if '.' in entrypoint:
-            cls, entrypoint = entrypoint.split('.', 1)
-            ep = getattr(module, cls)
-            init_args = spec.get('arguments')
-            if init_args is None:
-                init_args = {}
-            elif isinstance(init_args, str):
-                init_args = json.loads(init_args)
-            elif isinstance(init_args, dict):
-                pass
+        for entrypoint in entrypoints:
+            tool_name = entrypoint['name']
+            if tool_name in tools_mapping:
+                print(f"Tool '{tool_name}' has is overriden by new definition")
+
+            # Check if we're accessing a class method
+            method = entrypoint['method']
+            if '.' in method:
+                cls, method = method.split('.', 1)
+                ep = getattr(module, cls)
+                init_args = entrypoint.get('args', {})
+                if isinstance(init_args, str):
+                    init_args = json.loads(init_args)
+                elif isinstance(init_args, dict):
+                    pass
+                else:
+                    raise TypeError(f"Bad 'arguments' passed in for tool {tool_name}!")
+
+                ep = ep(**init_args)
+
+                tool = Tool(ep, method=method, name=tool_name)
             else:
-                raise TypeError(f"Bad 'arguments' passed in for tool {tool_name}!")
-
-            ep = ep(**init_args)
-
-            tool = Tool(ep, method=entrypoint, name=tool_name)
-        else:
-            ep = getattr(module, cls)
-            tool = Tool(ep, name=tool_name)
+                ep = getattr(module, method)
+                tool = Tool(ep, name=tool_name)
 
         tools_mapping[tool.name] = tool
 

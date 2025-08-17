@@ -1,0 +1,22 @@
+# Specifies tool usage for the llm to have access to.
+
+[[tool]]
+type = "module"
+path = "quick_query.tools.fs"
+entrypoints = [
+    {name = "read_file",  method = "FileSystem.read_file",  args = {root = "$HOME/Projects/quick-query/examples"}},
+    {name = "write_file", method = "FileSystem.write_file", args = {root = "$HOME/Projects/quick-query/examples"}},
+    {name = "list_file",  method = "FileSystem.list_file",  args = {root = "$HOME/Projects/quick-query/examples"}},
+]
+
+[[tool]]
+type = "module"
+path = "quick_query.tools.memory"
+entrypoints = [
+    {name = "read_memory",   method = "Memory.read_memory",   args = {db = "$HOME/Projects/quick-query/examples/memory.db"}},
+    {name = "write_memory",  method = "Memory.write_memory",  args = {db = "$HOME/Projects/quick-query/examples/memory.db"}},
+    {name = "delete_memory", method = "Memory.delete_memory", args = {db = "$HOME/Projects/quick-query/examples/memory.db"}},
+    {name = "list_memories", method = "Memory.list_memories", args = {db = "$HOME/Projects/quick-query/examples/memory.db"}},
+]
+
+
