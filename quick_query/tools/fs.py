@@ -1,5 +1,5 @@
 import pathlib
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 class FileSystem:
     """Utility class for safe file operations within a designated root directory."""
@@ -81,9 +81,11 @@ class FileSystem:
         except Exception as e:
             return {"success": False, "error": e.__class__.__name__}
 
-    def list_files(self, path: str) -> Dict[str, Any]:
+    def list_files(self, path: Optional[str]) -> Dict[str, Any]:
         """
-        List all entries in a directory.
+        List all entries in a directory.  If path is not provided, lists all
+        files at '/'.  Relative paths are converted to absolute paths - for example,
+        if list_files("path/to/file") is called, it is converted to "/path/to/file".
 
         Parameters:
             path: str - Relative path to the directory.

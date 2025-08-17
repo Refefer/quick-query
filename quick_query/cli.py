@@ -7,7 +7,7 @@ import select
 import sys
 
 from quick_query.openapi import OpenAIServer, get_model_id
-from quick_query.chat import chat
+from quick_query.chat import Chat
 from quick_query.streaming_response import StreamProcesser
 from quick_query.config import load_toml_file, load_toml_prompt, read_model, load_tools_from_toml
 from quick_query.formatter import get_formatter
@@ -121,7 +121,8 @@ def main(args) -> None:
         case "chat":
             initial_state = InitialState(create_system_prompt(args))
 
-            chat(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
+            chat = Chat(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
+            chat.run()
 
         case "template":
             try:
