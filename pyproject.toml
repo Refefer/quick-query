@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quick-query"
+version = "0.1.0"
+description = "A very lightweight terminal LLM chat and prompter."
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+  {name = "Andrew Stanton", email = "refefer@gmail.com"}
+]
+license = {text = "MIT"}
+dependencies = [
+  "requests>=2.31"
+]
+optional-dependencies = {
+  markdown = ["rich"],
+  template = ["Jinja2>=3.1"]
+}
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent"
+]
+
+[project.urls]
+Homepage = "https://github.com/refefer/quick-query"
