@@ -239,6 +239,19 @@ class Chat:
         for cmd_cls in (Reset, Save, Undo, Redo, Pretty, Multiline, ToolsToggle):
             self.add_command(cmd_cls())
 
+    # ---------------------------------------------------------------------
+    # UI helpers – only the interactive chat prints these, the loader stays silent
+    # ---------------------------------------------------------------------
+    def _show_loaded_tools(self) -> None:
+        """Print a one‑line summary for each tool that the server registered.
+        This reproduces the old ``print(f"Loaded: {tool}'")`` output.
+        """
+        tools = getattr(self.server, "tools", {})
+        if not tools:
+            return
+        for tool in tools.values():
+            print(f"Loaded: {tool}'")
+
     def _setup_messages(self) -> List[Dict[str, Any]]:
         """Initialize the message list based on the provided initial state."""
         msgs: List[Dict[str, Any]] = []
@@ -308,6 +321,12 @@ class Chat:
 
     def run(self) -> None:
         """Main chat loop that processes user input and model responses."""
+        # -------------------------------------------------------------
+        # Show tool‑load messages once at the beginning of an interactive session.
+        # (Chat is only instantiated for interactive use, so we can print unconditionally.)
+        # -------------------------------------------------------------
+        self._show_loaded_tools()
+
         try:
             while True:
                 if not self.messages or self.messages[-1]["role"] not in ("user", "tool"):

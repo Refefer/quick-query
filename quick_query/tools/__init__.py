@@ -176,8 +176,6 @@ def load_tools(tools_mapping: typing.Mapping, tools: typing.Dict[str, dict]):
 
         for entrypoint in entrypoints:
             tool_name = entrypoint['name']
-            if tool_name in tools_mapping:
-                print(f"Tool '{tool_name}' has is overriden by new definition")
 
             # Check if we're accessing a class method
             method = entrypoint['method']
@@ -199,7 +197,6 @@ def load_tools(tools_mapping: typing.Mapping, tools: typing.Dict[str, dict]):
                 ep = getattr(module, method)
                 tool = Tool(ep, name=tool_name, enabled=enabled)
 
-            print(f"Loaded: {tool}'")
             tools_mapping[tool.name] = tool
 
     return tools_mapping
