@@ -43,17 +43,30 @@ quick‑query expects two TOML files placed under ``$XDG_CONFIG_HOME/quick-query
 ### Minimal `conf.toml`
 ```toml
 [profile.default]
+credentials = "openai"
 model = "gpt-4o-mini"
 
-[profile.default.credentials]
+[profile.coding-agent]
+credentials = "openai"
+model = "gpt-4o-mini"
+prompt = "coding-agent"
+
+[credentials.openrouter]
 host = "https://openrouter.ai/api/v1"
 api_key = "YOUR_API_KEY"
+
+[credentials.openai]
+host = "https://api.openai.com/v1"
+api_key = "$OPENAI_API_TOKEN"
 ```
 
 ### Minimal `prompts.toml`
 ```toml
 [default]
 prompt = "You are a helpful assistant."
+
+[coding-agent]
+prompt = "Write me some code!"
 ```
 
 Both files can contain multiple sections (e.g., `[openrouter]`, `[cerebras]`).  Choose the desired section with `--profile` and `--system-prompt-name`.
