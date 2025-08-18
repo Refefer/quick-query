@@ -1,9 +1,21 @@
+# -*- coding: utf-8 -*-
+"""
+Configuration helpers for quick_query.
+
+This module provides utility functions for loading and interpreting the TOML
+configuration file used by the CLI.  The original implementation exposed a
+``read_model`` function that returned a raw ``dict``.  We are now introducing a
+structured ``Profile`` dataclass (see ``quick_query/profile.py``) and helper
+functions that return ``Profile`` objects.
+"""
+
 import sys
 import os
 from typing import Optional, Dict, List, Any, Generator, Mapping
 import tomllib
 
 from .tools import load_tools
+from .profile import Profile
 
 def expand_str(val: str) -> str:
     """Expand $VAR, ${VAR} and %VAR% in a single string."""
@@ -47,29 +59,83 @@ def load_toml_file(
         print(f"Error: Invalid TOML format in {path}", file=sys.stderr)
         return {}
 
+def read_profiles(config_path: str) -> List[Profile]:
+    """Load *all* profiles from a TOML configuration file and return them as
+    :class:`~quick_query.profile.Profile` instances.
+
+    The TOML layout is expected to contain a top‑level ``profile`` mapping
+    (e.g. ``[profile.my‑profile]``) and a top‑level ``credentials`` mapping.
+    Each profile entry may contain a ``credentials`` key that references an
+    entry in the ``credentials`` table.  The reference is resolved so that the
+    resulting ``Profile.credentials`` attribute holds the actual credential dict.
+
+    Parameters
+    ----------
+    config_path: str
+        Path to the TOML configuration file.
+
+    Returns
+    -------
+    List[Profile]
+        One :class:`Profile` object per profile defined in the file.
+    """
+    data = load_toml_file(config_path)
+    profiles_section = data.get("profile", {})
+    if not isinstance(profiles_section, Mapping):
+        raise ValueError("'profile' section must be a mapping in the TOML file")
+
+    credentials_section = data.get("credentials", {})
+    result: List[Profile] = []
+
+    for name, raw in profiles_section.items():
+        # Resolve credentials reference (if any)
+        cred_key = raw.get("credentials") if isinstance(raw, Mapping) else None
+        cred_dict: Dict[str, Any] = {}
+        if cred_key:
+            if not isinstance(credentials_section, Mapping):
+                raise ValueError("'credentials' section must be a mapping in the TOML file")
+            cred_dict = credentials_section.get(cred_key, {})
+
+        # Pull known fields; anything else goes into ``extra``
+        known_keys = {"model", "tools", "prompt", "structured_streaming", "credentials"}
+        extra: Dict[str, Any] = {k: v for k, v in (raw or {}).items() if k not in known_keys}
+
+        profile_obj = Profile(
+            name=name,
+            model=raw.get("model") if isinstance(raw, Mapping) else None,
+            credentials=cred_dict,
+            tools=raw.get("tools") if isinstance(raw, Mapping) else None,
+            prompt_name=raw.get("prompt") if isinstance(raw, Mapping) else None,
+            structured_streaming=raw.get("structured_streaming") if isinstance(raw, Mapping) else None,
+            extra=extra,
+        )
+        result.append(profile_obj)
+
+    return result
+
+def get_profile(config_path: str, name: str = "default") -> Profile:
+    """Return a single :class:`Profile` by name.
+
+    This is a convenience wrapper used by the CLI.  It raises ``KeyError`` if the
+    requested profile does not exist.
+    """
+    for p in read_profiles(config_path):
+        if p.name == name:
+            return p
+    raise KeyError(f"Profile '{name}' not found in {config_path}")
+
 def read_model(
     config_path: str,
     model: Optional[str]
 ) -> Dict[str, Any]:
-    """
-    Read API configuration from a TOML file for a given profile.
+    """Legacy wrapper kept for backward compatibility.
 
-    Args:
-        config_path: Path to the configuration file
-        model: Name of the profile (section) to retrieve; defaults to "default".
-
-    Returns:
-        Dict of configuration values
+    Historically callers expected a plain ``dict``.  This function now delegates
+    to :func:`get_profile` and returns ``profile.as_dict()`` so existing code
+    continues to work.
     """
-    conf = load_toml_file(config_path)
-    # The top‑level key is now "profile" instead of "models"
-    profiles = conf.get('profile', {})
-    if not profiles:
-        raise KeyError("No 'profile' section found in configuration file")
-    selected = profiles[model or "default"]
-    credentials = conf['credentials'][selected['credentials']]
-    selected['credentials'] = credentials
-    return selected
+    profile = get_profile(config_path, model or "default")
+    return profile.as_dict()
 
 def get_profile_prompt_name(
     config_path: str,
@@ -79,6 +145,8 @@ def get_profile_prompt_name(
 
     If the field is absent, ``None`` is returned.
     """
+    # NOTE: This helper is retained for backward compatibility; new code should
+    # use ``Profile.prompt_name`` directly.
     conf = load_toml_file(config_path)
     profiles = conf.get('profile', {})
     selected = profiles.get(profile or 'default', {})
@@ -108,4 +176,3 @@ def load_toml_prompt(
 def load_tools_from_toml(tool_mapping, file_path):
     data = load_toml_file(file_path)
     return load_tools(tool_mapping, data)
-

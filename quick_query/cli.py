@@ -12,13 +12,14 @@ from quick_query.streaming_response import StreamProcesser
 from quick_query.config import (
     load_toml_file,
     load_toml_prompt,
-    read_model,
+    get_profile,
     load_tools_from_toml,
-    get_profile_prompt_name,
+    # get_profile_prompt_name,  # Deprecated – use Profile.prompt_name instead
 )
 from quick_query.formatter import get_formatter
 from quick_query.prompter import run_prompt
 from quick_query.message import MessageProcessor
+
 
 def try_read_stdin() -> str | None:
     """Try to read from standard input without blocking.
@@ -31,8 +32,10 @@ def try_read_stdin() -> str | None:
     else:
         return None
 
+
 def hr_rule():
     print("=" *20)
+
 
 def list_settings(args):
     if args.system_prompts:
@@ -57,6 +60,7 @@ def list_settings(args):
 
             hr_rule()
             print()
+
 
 def create_system_prompt(
     args,
@@ -87,16 +91,18 @@ def create_system_prompt(
         sys.exit(1)
     return system_prompt
 
+
 def setup_api_params(args):
-    conf = read_model(
+    profile = get_profile(
         args.conf_file,
         args.profile
     )
-    creds = conf['credentials']
+    creds = profile.credentials
     host = creds['host']
     api_key = creds['api_key']
-    model = conf.get("model")
-    structured_streaming = conf.get('structured_streaming', True)
+    model = profile.model
+    # Use structured_streaming from profile if provided; default to True as before.
+    structured_streaming = profile.structured_streaming if profile.structured_streaming is not None else True
 
     if model is None:
         model = get_model_id(host, api_key)
@@ -105,7 +111,7 @@ def setup_api_params(args):
     if args.tools is not None:
         tools_to_load.append(args.tools)
 
-    model_tools = conf.get('tools')
+    model_tools = profile.tools
     if model_tools is not None:
         if isinstance(model_tools, str):
             model_tools = [model_tools]
@@ -118,7 +124,8 @@ def setup_api_params(args):
 
     tools = tools if tools else None
 
-    return OpenAIServer(host, api_key, model, args.cot_token, structured_streaming, tools), conf
+    return OpenAIServer(host, api_key, model, args.cot_token, structured_streaming, tools), profile
+
 
 class InitialState:
     def __init__(self, system_prompt, stdin_prompt=None, cli_prompt=None, prompt_file=None):
@@ -129,6 +136,7 @@ class InitialState:
         if prompt_file is not None:
             with open(prompt_file) as f:
                 self.cli_prompt = f.read()
+
 
 def main(args) -> None:
     """Main execution flow for the script."""
@@ -141,7 +149,7 @@ def main(args) -> None:
     match args.mode:
         case "chat":
             initial_state = InitialState(
-                create_system_prompt(args, get_profile_prompt_name(args.conf_file, args.profile))
+                create_system_prompt(args, profile_conf.prompt_name)
             )
             chat = Chat(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
             chat.run()
@@ -155,7 +163,7 @@ def main(args) -> None:
 
             import quick_query.template as template
             initial_state = InitialState(
-                create_system_prompt(args, get_profile_prompt_name(args.conf_file, args.profile))
+                create_system_prompt(args, profile_conf.prompt_name)
             )
             if args.template_from_file is not None:
                 template_extractor = template.TemplateFileExtractor(args.template_from_file)
@@ -172,12 +180,13 @@ def main(args) -> None:
 
         case _:
             initial_state = InitialState(
-                create_system_prompt(args, get_profile_prompt_name(args.conf_file, args.profile)),
+                create_system_prompt(args, profile_conf.prompt_name),
                 try_read_stdin(),
                 args.prompt,
                 args.prompt_file,
             )
             run_prompt(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
+
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments.
@@ -346,6 +355,7 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     return parser.parse_args()
+
 
 def cli_entrypoint():
     args = parse_arguments()
