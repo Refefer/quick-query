@@ -13,6 +13,7 @@ from quick_query.config import (
     load_toml_file,
     load_toml_prompt,
     get_profile,
+    read_profiles,
     load_tools_from_toml,
     # get_profile_prompt_name,  # Deprecated – use Profile.prompt_name instead
 )
@@ -50,13 +51,34 @@ def list_settings(args):
             print()
 
     if args.profiles:
-        profiles = load_toml_file(args.conf_file)
-        for config_name, details in profiles.items():
-            print(f"Config: {config_name}")
-            for key, value in details.items():
-                if key == 'api_key':
-                    continue
-                print(f" -{key}: {value}")
+        # Load all profiles as ``Profile`` objects – this gives us typed access to
+        # credentials, tools, etc., and guarantees we handle any future fields
+        # consistently.
+        profiles = read_profiles(args.conf_file)
+        for profile in profiles:
+            print(f"Profile: {profile.name}")
+
+            # Simple scalar fields
+            if profile.model is not None:
+                print(f" -model: {profile.model}")
+            if profile.prompt_name is not None:
+                print(f" -prompt_name: {profile.prompt_name}")
+            if profile.structured_streaming is not None:
+                print(f" -structured_streaming: {profile.structured_streaming}")
+            if profile.tools:
+                print(f" -tools: {profile.tools}")
+
+            # Credentials – redact the api_key but show other keys.
+            for cred_key, cred_val in profile.credentials.items():
+                if cred_key == "api_key":
+                    # Redact the secret; we keep the key name visible for context.
+                    print(f" -{cred_key}: ***")  # <-- redacted for security
+                else:
+                    print(f" -{cred_key}: {cred_val}")
+
+            # Any extra keys captured from the TOML that are not part of the core model.
+            for extra_key, extra_val in profile.extra.items():
+                print(f" -{extra_key}: {extra_val}")
 
             hr_rule()
             print()
