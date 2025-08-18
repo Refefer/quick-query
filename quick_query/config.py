@@ -71,6 +71,19 @@ def read_model(
     selected['credentials'] = credentials
     return selected
 
+def get_profile_prompt_name(
+    config_path: str,
+    profile: str
+) -> Optional[str]:
+    """Return the optional ``prompt`` field for *profile*.
+
+    If the field is absent, ``None`` is returned.
+    """
+    conf = load_toml_file(config_path)
+    profiles = conf.get('profile', {})
+    selected = profiles.get(profile or 'default', {})
+    return selected.get('prompt')
+
 def load_toml_prompt(
     file_path: str,
     section_name: Optional[str]

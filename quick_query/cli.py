@@ -9,7 +9,13 @@ import sys
 from quick_query.openapi import OpenAIServer, get_model_id
 from quick_query.chat import Chat
 from quick_query.streaming_response import StreamProcesser
-from quick_query.config import load_toml_file, load_toml_prompt, read_model, load_tools_from_toml
+from quick_query.config import (
+    load_toml_file,
+    load_toml_prompt,
+    read_model,
+    load_tools_from_toml,
+    get_profile_prompt_name,
+)
 from quick_query.formatter import get_formatter
 from quick_query.prompter import run_prompt
 from quick_query.message import MessageProcessor
@@ -52,16 +58,33 @@ def list_settings(args):
             hr_rule()
             print()
 
-def create_system_prompt(args):
-    system_prompt = None
-    if args.system_prompt_file and args.system_prompt_name:
-        system_prompt = load_toml_prompt(
-            args.system_prompt_file,
-            args.system_prompt_name
-        )
-        if not system_prompt:
-            return
+def create_system_prompt(
+    args,
+    profile_prompt_name: Optional[str] = None,
+) -> Optional[str]:
+    """Determine which system prompt to use.
 
+    Precedence order:
+    1. ``--system-prompt-name`` flag (if provided).
+    2. ``prompt`` field from the selected profile.
+    3. ``default`` prompt name.
+    """
+    # Resolve final prompt section name
+    if args.system_prompt_name is not None:
+        prompt_section = args.system_prompt_name
+    elif profile_prompt_name:
+        prompt_section = profile_prompt_name
+    else:
+        prompt_section = "default"
+
+    # Load the prompt text from the TOML file
+    system_prompt = load_toml_prompt(args.system_prompt_file, prompt_section)
+    if system_prompt is None:
+        print(
+            f"Error: System prompt '{prompt_section}' not found in {args.system_prompt_file}\n"
+            "Available prompts are those defined under a [section] with a 'prompt' key."
+        )
+        sys.exit(1)
     return system_prompt
 
 def setup_api_params(args):
@@ -95,7 +118,7 @@ def setup_api_params(args):
 
     tools = tools if tools else None
 
-    return OpenAIServer(host, api_key, model, args.cot_token, structured_streaming, tools)
+    return OpenAIServer(host, api_key, model, args.cot_token, structured_streaming, tools), conf
 
 class InitialState:
     def __init__(self, system_prompt, stdin_prompt=None, cli_prompt=None, prompt_file=None):
@@ -108,19 +131,18 @@ class InitialState:
                 self.cli_prompt = f.read()
 
 def main(args) -> None:
-    """
-    Main execution flow for the script.
-    """
+    """Main execution flow for the script."""
     
-    server = setup_api_params(args)
+    server, profile_conf = setup_api_params(args)
     stream_processer = StreamProcesser(args.cot_token, args.min_chunk_size)
     formatter = get_formatter(args.cot_block_fd, args.format_markdown)
 
     mp = MessageProcessor(args.re2)
     match args.mode:
         case "chat":
-            initial_state = InitialState(create_system_prompt(args))
-
+            initial_state = InitialState(
+                create_system_prompt(args, get_profile_prompt_name(args.conf_file, args.profile))
+            )
             chat = Chat(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
             chat.run()
 
@@ -132,7 +154,9 @@ def main(args) -> None:
                 sys.exit(1)
 
             import quick_query.template as template
-            initial_state = InitialState(create_system_prompt(args))
+            initial_state = InitialState(
+                create_system_prompt(args, get_profile_prompt_name(args.conf_file, args.profile))
+            )
             if args.template_from_file is not None:
                 template_extractor = template.TemplateFileExtractor(args.template_from_file)
             else:
@@ -148,22 +172,21 @@ def main(args) -> None:
 
         case _:
             initial_state = InitialState(
-                create_system_prompt(args),
+                create_system_prompt(args, get_profile_prompt_name(args.conf_file, args.profile)),
                 try_read_stdin(),
                 args.prompt,
-                args.prompt_file)
-
+                args.prompt_file,
+            )
             run_prompt(initial_state, server, stream_processer, formatter, mp, needs_buffering=args.format_markdown)
 
 def parse_arguments() -> argparse.Namespace:
-    """
-    Parse command-line arguments.
+    """Parse command-line arguments.
 
     Returns:
         argparse.Namespace: Parsed arguments.
     """
     config_dir = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "quick-query"
-    system_prompt_file= config_dir / "prompts.toml"
+    system_prompt_file = config_dir / "prompts.toml"
     conf_file: Path = config_dir / "conf.toml"
 
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
@@ -174,66 +197,67 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--system-prompt-file",
         default=str(system_prompt_file),
-        help="Path to TOML file containing system prompts"
+        help="Path to TOML file containing system prompts",
     )
     parser.add_argument(
         "-sp",
         "--system-prompt-name",
-        default='default',
-        help="Name of the system prompt section in the TOML file"
+        default=None,
+        help="Name of the system prompt section in the TOML file",
     )
     parser.add_argument(
         "--conf-file",
         default=str(conf_file),
-        help="Path to TOML file containing configuration"
+        help="Path to TOML file containing configuration",
     )
     parser.add_argument(
         "-s",
         dest="profile",
         default="default",
-        help="Name of the profile to connect to in conf.toml"
+        help="Name of the profile to connect to in conf.toml",
     )
     parser.add_argument(
-        "-t", 
+        "-t",
         "--tools",
         dest="tools",
-        help="Loads a set of tools from a toml file."
+        help="Loads a set of tools from a toml file.",
     )
 
     parser.add_argument(
         "-m",
         "--format-markdown",
         action="store_true",
-        help="If enabled, formats output for the terminal in markdown.  If the library isn't installed, prints as text"
+        help="If enabled, formats output for the terminal in markdown.  If the library isn't installed, prints as text",
     )
 
     parser.add_argument(
         "--cot-block-fd",
-        default='/dev/tty',
-        help="Where to emit cot blocks.  Default is /dev/tty."
+        default="/dev/tty",
+        help="Where to emit cot blocks.  Default is /dev/tty.",
     )
     parser.add_argument(
         "--cot-token",
         default="think",
-        help="Specifies the tag name for chain-of-thought."
+        help="Specifies the tag name for chain-of-thought.",
     )
     parser.add_argument(
         "--re2",
         action="store_true",
-        help="If specified, uses re-think prompting."
+        help="If specified, uses re-think prompting.",
     )
 
     parser.add_argument(
         "--min-chunk-size",
         default=10,
         type=int,
-        help="Specifies the minimum characters to emit for stream."
+        help="Specifies the minimum characters to emit for stream.",
     )
 
     subparsers = parser.add_subparsers(
-        dest="mode", 
-        required=True, 
-        help="Which mode to run qq")
+        dest="mode",
+        required=True,
+        help="Which mode to run qq",
+    )
 
     # Standard one prompt, one response piped to stdout
     completion = subparsers.add_parser("completion", help="Performs a completion task.")
@@ -242,13 +266,13 @@ def parse_arguments() -> argparse.Namespace:
     group.add_argument(
         "-p",
         "--prompt",
-        help="The user's prompt"
+        help="The user's prompt",
     )
 
     group.add_argument(
         "-f",
         "--prompt-file",
-        help="Load the prompt from a file"
+        help="Load the prompt from a file",
     )
 
     # Interactive mode
@@ -256,20 +280,20 @@ def parse_arguments() -> argparse.Namespace:
 
     lister = subparsers.add_parser(
         "list",
-        help="List details about the underlying configs"
+        help="List details about the underlying configs",
     )
 
     lister.add_argument(
         "--system-prompts",
         action="store_true",
-        help="Lists system prompts currently configured"
+        help="Lists system prompts currently configured",
     )
 
     lister.add_argument(
         "--profiles",
         dest="profiles",
         action="store_true",
-        help="Lists the profiles configured on the system"
+        help="Lists the profiles configured on the system",
     )
 
     # Runs in template mode
@@ -280,13 +304,13 @@ def parse_arguments() -> argparse.Namespace:
     group.add_argument(
         "--template-from-file",
         dest="template_from_file",
-        help="File containing the jinja template."
+        help="File containing the jinja template.",
     )
 
     group.add_argument(
         "--template-from-field",
         dest="template_from_field",
-        help="Reads the template from the specified field on the variables dictionary."
+        help="Reads the template from the specified field on the variables dictionary.",
     )
 
     group = template.add_mutually_exclusive_group(required=True)
@@ -294,14 +318,14 @@ def parse_arguments() -> argparse.Namespace:
         "--variables",
         "-v",
         default=None,
-        help="Inline JSON structure for jinja2 variables."
+        help="Inline JSON structure for jinja2 variables.",
     )
 
     group.add_argument(
         "--variables-from-file",
         "-vj",
         default=None,
-        help="Read variables from jsonl file.  If set to '-', reads from stdin "
+        help="Read variables from jsonl file.  If set to '-', reads from stdin ",
     )
 
     template.add_argument(
@@ -309,7 +333,7 @@ def parse_arguments() -> argparse.Namespace:
         "--output",
         default=None,
         help="Where to output the results.  If omitted, writes to stdout.  Output format is in JSONL format with the following"
-             'keys: "prompt", "variables", "response"'
+             'keys: "prompt", "variables", "response"',
     )
 
     import multiprocessing
@@ -318,14 +342,14 @@ def parse_arguments() -> argparse.Namespace:
         "--concurrency",
         default=multiprocessing.cpu_count(),
         type=int,
-        help="Where to output the results.  If omitted, writes to stdout.  Output format is in JSONL format with the following"
+        help="Where to output the results.  If omitted, writes to stdout.  Output format is in JSONL format with the following",
     )
 
     return parser.parse_args()
 
 def cli_entrypoint():
     args = parse_arguments()
-    if args.mode == 'list':
+    if args.mode == "list":
         list_settings(args)
         sys.exit(0)
 

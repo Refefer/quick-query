@@ -37,7 +37,7 @@ quick‑query expects two TOML files placed under ``$XDG_CONFIG_HOME/quick-query
 
 | File | Purpose | Example location |
 |------|---------|-------------------|
-| `conf.toml` | Profile definitions, model IDs, credentials, and optional tool specifications. | `examples/conf.toml` |
+| `conf.toml` | Profile definitions, profile IDs, credentials, and optional tool specifications. | `examples/conf.toml` |
 | `prompts.toml` | Named system prompts that can be selected with `--system-prompt-name`. | `examples/prompts.toml` |
 
 ### Minimal `conf.toml`

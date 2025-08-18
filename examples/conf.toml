@@ -4,9 +4,10 @@
 credentials = "local"
 tools = "$HOME/.config/quick-query/tools.toml" 
 
-[profile.o4mini]
+[profile.coding]
 credentials = "openai"
 model = 'o4-mini'
+prompt = "code-assistant"
 
 [credentials.local]
 host = "http://localhost:12345/v1"
