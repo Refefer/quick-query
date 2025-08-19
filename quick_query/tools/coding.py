@@ -65,9 +65,9 @@ class Coding:
             txt1 = self._resolve_path(file1).read_text().splitlines(keepends=True)
             txt2 = self._resolve_path(file2).read_text().splitlines(keepends=True)
             diff = difflib.ndiff(txt1, txt2)
-            return "".join(diff)
+            return {"success": True, "diff": "".join(diff)}
         except Exception as exc:
-            raise RuntimeError(f"Failed to diff files: {exc}") from exc
+            return {"success": False, "error": str(exc)}
 
     # --------------------------------------------------------------------- #
     # Public API
