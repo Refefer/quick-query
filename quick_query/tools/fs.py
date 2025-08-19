@@ -1,3 +1,4 @@
+import atexit
 import pathlib
 from typing import List, Dict, Any, Optional
 
@@ -22,6 +23,11 @@ class FileSystem:
         if not self.root.is_dir():
             raise NotADirectoryError(f"'{root}' is not a valid directory")
 
+        # Keep track of temporary files created via ``create_temp_file`` so we can
+        # clean them up automatically when the interpreter exits.
+        self._temp_files: List[pathlib.Path] = []
+        atexit.register(self._cleanup_temp_files)
+
     def resolve_path(self, path: str) -> pathlib.Path:
         """
         Safely resolve a user-provided path relative to the root directory.
@@ -42,6 +48,47 @@ class FileSystem:
             raise FileNotFoundError(f"File Not Found: {path}")
 
         return resolved_path
+
+    def _cleanup_temp_files(self) -> None:
+        """Remove any temporary files that were created during this session.
+
+        This method is registered with ``atexit`` and will be called when the
+        Python process terminates.  Errors during cleanup are silenced to avoid
+        interfering with normal shutdown procedures.
+        """
+        for temp_path in self._temp_files:
+            if temp_path.exists():
+                temp_path.unlink()
+
+        self._temp_files.clear()
+
+    def create_temp_file(self, dirname: str) -> str:
+        """Create an empty temporary file with a random name inside *dir*.  This
+        method is useful for creating a file to write a code change to and then diffing
+        it with the original.
+
+        The file is created on disk and its path is recorded so that it will be
+        automatically removed when the interpreter exits.
+
+        Parameters:
+            dirname: str - Relative directory (under the managed root) where the temporary file should be placed.
+
+        Returns
+        -------
+        str - {"success": true, "path": "path/to/file"} or {"success": false, "error": str}
+        """
+        target_dir = self.resolve_path(dir)
+        if not target_dir.is_dir():
+            return {"success": False, "error": f"{target_dir} is not a directory."}
+
+        # ``delete=False`` because we want to manage deletion ourselves.
+        tmp = tempfile.NamedTemporaryFile(delete=False, dir=str(target_dir))
+        tmp_path = pathlib.Path(tmp.name)
+        tmp.close()
+
+        self._temp_files.append(tmp_path)
+        rel_path = str(tmp_path.resolve())[self.root_len:]
+        return {"success": True, "path": rel_path}
 
     def read_file(self, path: str) -> Dict[str, Any]:
         """
@@ -128,3 +175,5 @@ class FileSystem:
 
         except Exception as e:
             return {"success": False, "error": e.__class__.__name__}
+
+
