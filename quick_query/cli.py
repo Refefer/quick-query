@@ -15,7 +15,6 @@ from quick_query.config import (
     get_profile,
     read_profiles,
     load_tools_from_toml,
-    # get_profile_prompt_name,  # Deprecated – use Profile.prompt_name instead
 )
 from quick_query.formatter import get_formatter
 from quick_query.prompter import run_prompt
@@ -70,11 +69,10 @@ def list_settings(args):
 
             # Credentials – redact the api_key but show other keys.
             for cred_key, cred_val in profile.credentials.items():
-                if cred_key == "api_key":
-                    # Redact the secret; we keep the key name visible for context.
-                    print(f" -{cred_key}: ***")  # <-- redacted for security
-                else:
-                    print(f" -{cred_key}: {cred_val}")
+                if cred_key == 'api_key':
+                    cred_value = '***'
+
+                print(f" -{cred_key}: {cred_val}")
 
             # Any extra keys captured from the TOML that are not part of the core model.
             for extra_key, extra_val in profile.extra.items():

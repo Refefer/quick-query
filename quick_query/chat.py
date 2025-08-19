@@ -148,9 +148,9 @@ class ToolsToggle(Command):
     ) -> bool:
         """Handle three sub‑commands:
         
-+        * ``/tools enable <tool_name>`` – turn a tool **on**
-+        * ``/tools disable <tool_name>`` – turn a tool **off**
-+        * ``/tools list`` – show every tool and whether it is enabled
+        * ``/tools enable <tool_name>`` \u2013 turn a tool **on**
+        * ``/tools disable <tool_name>`` \u2013 turn a tool **off**
+        * ``/tools list`` \u2013 show every tool and whether it is enabled
         """
         parts = user_input.strip().split()
         if len(parts) < 2:
@@ -190,7 +190,7 @@ class ToolsToggle(Command):
 
     def _list_tools(self, chat) -> None:
         """Print a nicely formatted table of all registered tools.
-        Each line shows the tool name and a ✅/❌ indicator for its enabled state.
+        Each line shows the tool name and a \u2705/\u274c indicator for its enabled state.
         """
         tools = getattr(chat.server, "tools", {})
         if not tools:
@@ -200,7 +200,7 @@ class ToolsToggle(Command):
         print("\nAvailable tools:")
         for name, tool in sorted(tools.items()):
             enabled = getattr(tool, "enabled", True)
-            status = "✅ enabled" if enabled else "❌ disabled"
+            status = "\u2705 enabled" if enabled else "\u274c disabled"
             print(f"  {name:<20} {status}")
 
 class Chat:
@@ -220,7 +220,7 @@ class Chat:
         Args:
             initial_state: Object containing prompts and configuration.
             server: Backend that provides ``send_chat_completion`` and tool calls.
-            stream_processor: Converts raw streaming chunks into higher‑level blocks.
+            stream_processor: Converts raw streaming chunks into higher\u2011level blocks.
             formatter: Formats processed blocks for display.
             message_processor: Handles conversion of raw text to chat messages.
             needs_buffering: Whether the formatter requires output buffering.
@@ -239,18 +239,23 @@ class Chat:
         for cmd_cls in (Reset, Save, Undo, Redo, Pretty, Multiline, ToolsToggle):
             self.add_command(cmd_cls())
 
-    # ---------------------------------------------------------------------
-    # UI helpers – only the interactive chat prints these, the loader stays silent
-    # ---------------------------------------------------------------------
     def _show_loaded_tools(self) -> None:
-        """Print a one‑line summary for each tool that the server registered.
-        This reproduces the old ``print(f"Loaded: {tool}'")`` output.
+        """
+        Print a single sorted line summarising loaded tools with enabled/disabled status.
+        Example format: ``Loaded tools: [\u2705 tool_a] [\u274c tool_b]``
         """
         tools = getattr(self.server, "tools", {})
         if not tools:
             return
-        for tool in tools.values():
-            print(f"Loaded: {tool}'")
+
+        # Build a list of "[\u2705 name]" or "[\u274c name]" entries, sorted by name.
+        parts = []
+        for name, tool in sorted(tools.items()):
+            enabled = getattr(tool, "enabled", True)
+            indicator = "\u2705" if enabled else "\u274c"
+            parts.append(f"[{indicator} {name}]")
+
+        print("Loaded tools:", " ".join(parts))
 
     def _setup_messages(self) -> List[Dict[str, Any]]:
         """Initialize the message list based on the provided initial state."""
@@ -282,7 +287,7 @@ class Chat:
     def add_command(self, command: Command) -> None:
         """Register a command instance with the chat."""
         if not command.cmd:
-            raise ValueError("Command must define a non‑empty ``cmd`` attribute.")
+            raise ValueError("Command must define a non\u2011empty ``cmd`` attribute.")
 
         self.commands[command.cmd] = command
 
@@ -319,51 +324,54 @@ class Chat:
 
         return "\n".join(buffer)
 
+    def run_loop(self):
+        """
+        Main chat loop that processes user input and model responses.
+        """
+        while True:
+            if not self.messages or self.messages[-1]["role"] not in ("user", "tool"):
+                print(
+                    "Commands:",
+                    ", ".join("/" + name for name in self.commands),
+                )
+                user_input = self.get_user_input()
+                self.messages.append(
+                    self.message_processor.process_user_prompt(user_input)
+                )
+
+            chunk_stream = self.server.send_chat_completion(self.messages)
+            cot_stream = self.stream_processor.process_stream(chunk_stream)
+            response = dict(
+                process_streaming_response(
+                    cot_stream,
+                    self.formatter,
+                    self.needs_buffering,
+                )
+            )
+
+            if TagTypes.Tool_calls in response:
+                tc = response[TagTypes.Tool_calls]
+                self.messages.append(
+                    self.message_processor.process_tool_request(tc)
+                )
+                tool_resp = self.server.process_tool_call(tc)
+                self.messages.append(
+                    self.message_processor.process_tool_response(tool_resp)
+                )
+            else:
+                self.messages.append(
+                    {"role": "assistant", "content": response["content"]}
+                )
+                if not self.messages[-1]["content"].endswith("\n"):
+                    print()
+                print("=" * 10)
+
+
     def run(self) -> None:
-        """Main chat loop that processes user input and model responses."""
-        # -------------------------------------------------------------
-        # Show tool‑load messages once at the beginning of an interactive session.
-        # (Chat is only instantiated for interactive use, so we can print unconditionally.)
-        # -------------------------------------------------------------
+        """Kicks off the chat loop."""
         self._show_loaded_tools()
 
         try:
-            while True:
-                if not self.messages or self.messages[-1]["role"] not in ("user", "tool"):
-                    print(
-                        "Commands:",
-                        ", ".join("/" + name for name in self.commands),
-                    )
-                    user_input = self.get_user_input()
-                    self.messages.append(
-                        self.message_processor.process_user_prompt(user_input)
-                    )
-
-                chunk_stream = self.server.send_chat_completion(self.messages)
-                cot_stream = self.stream_processor.process_stream(chunk_stream)
-                response = dict(
-                    process_streaming_response(
-                        cot_stream,
-                        self.formatter,
-                        self.needs_buffering,
-                    )
-                )
-
-                if TagTypes.Tool_calls in response:
-                    tc = response[TagTypes.Tool_calls]
-                    self.messages.append(
-                        self.message_processor.process_tool_request(tc)
-                    )
-                    tool_resp = self.server.process_tool_call(tc)
-                    self.messages.append(
-                        self.message_processor.process_tool_response(tool_resp)
-                    )
-                else:
-                    self.messages.append(
-                        {"role": "assistant", "content": response["content"]}
-                    )
-                    if not self.messages[-1]["content"].endswith("\n"):
-                        print()
-                    print("=" * 10)
+            self.run_loop()
         except (KeyboardInterrupt, EOFError):
             print("\nExiting chat.")

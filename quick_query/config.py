@@ -122,6 +122,7 @@ def get_profile(config_path: str, name: str = "default") -> Profile:
     for p in read_profiles(config_path):
         if p.name == name:
             return p
+
     raise KeyError(f"Profile '{name}' not found in {config_path}")
 
 def read_model(
