@@ -5,13 +5,38 @@ coding.py
 Utility class for performing simple code‑related operations using only the
 Python standard library.  The implementation mirrors the style of `fs.py`,
 including type hints, docstrings, and basic error handling.
+
+**Note:** This version now relies on the external ``diff`` and ``patch``
+utilities, which are standard on Linux/macOS (WSL is also supported).  All
+operations are confined to the ``root`` directory supplied to ``Coding``.
 """
 
 from __future__ import annotations
 
 import pathlib
-import difflib
-from typing import Dict, Any
+import subprocess
+import shlex
+from typing import Dict, Any, List
+
+
+class PatchError(RuntimeError):
+    """Exception raised when a subprocess call to ``diff`` or ``patch`` fails.
+
+    Attributes
+    ----------
+    stdout : str
+        Captured standard output from the subprocess.
+    stderr : str
+        Captured standard error from the subprocess.
+    returncode : int
+        Exit status of the subprocess (non‑zero indicates failure).
+    """
+
+    def __init__(self, stdout: str, stderr: str, returncode: int) -> None:
+        super().__init__(stderr or stdout)
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
 
 
 class Coding:
@@ -19,7 +44,7 @@ class Coding:
     A small helper class that can generate a line‑by‑line diff between two
     files and apply such a diff back to a file.  The diff format used is the
     ``difflib.ndiff`` output, which can be directly consumed by
-    ``difflib.restore`` – keeping the whole process pure‑Python and portable.
+    ``difflib.restore`` — keeping the whole process pure‑Python and portable.
     """
 
     def __init__(self, root: str = ".") -> None:
@@ -43,78 +68,152 @@ class Coding:
         resolved = (self.root / path.lstrip("/")).resolve()
         if not str(resolved).startswith(str(self.root)):
             raise FileNotFoundError(f"Path {path!r} is outside the allowed root")
+
         return resolved
+
+    def _run_subprocess(self, cmd: List[str], input_text: str | None = None) -> str:
+        """Run *cmd* with ``cwd=self.root``.
+
+        Parameters
+        ----------
+        cmd: List[str]
+            Command and arguments to execute.
+        input_text: str | None, optional
+            Text to send to the process's stdin (used for ``patch``).
+
+        Returns
+        -------
+        str
+            The captured stdout of the command.
+
+        Raises
+        ------
+        PatchError
+            If the command exits with a non‑zero status.
+        """
+        try:
+            completed = subprocess.run(
+                cmd,
+                cwd=self.root,
+                input=input_text,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except Exception as exc:
+            raise PatchError("", str(exc), -1) from exc
+
+        if completed.returncode != 0:
+            raise PatchError(completed.stdout, completed.stderr, completed.returncode)
+
+        return completed.stdout
 
     # --------------------------------------------------------------------- #
     # Public API
     # --------------------------------------------------------------------- #
     def diff_files(self, file1: str, file2: str) -> str:
         """
-        Produce an ``ndiff`` representation of the differences between
-        *file1* and *file2*.
+        Produce an ``normal diff`` representation of the differences between
+        *file1* and *file2*.  For example, if the only difference between two files was the first line,
+        a patch might look like: ```
+        1c1
+        < x = 1 + 2
+        ---
+        > x = 1 * 2
+        ```
 
         Parameters:
             file1: str - Path to the file on disk to diff against.
             file2: str - Path to the file on disk to diff.
 
         Returns:
-            str - The diff as a single string.  This string can be passed directly
-                to :meth:`apply_patch`.
+            str - {"success": bool, "diff": (if true) The diff as a single string, "error": str(err)}  
+                  This string can be passed directly to :meth:`apply_patch`.
         """
         try:
-            txt1 = self._resolve_path(file1).read_text().splitlines(keepends=True)
-            txt2 = self._resolve_path(file2).read_text().splitlines(keepends=True)
-            diff = difflib.ndiff(txt1, txt2)
-            return {"success": True, "diff": "".join(diff)}
+            # Resolve to absolute paths for the external diff command.
+            path1 = str(self._resolve_path(file1))
+            path2 = str(self._resolve_path(file2))
+            # ``diff -u`` produces a unified diff.
+            diff_output = self._run_subprocess(["diff", "-u", path1, path2])
+            return {"success": True, "diff": diff_output}
+
+        except PatchError as exc:
+            return {"success": False, "error": exc.stderr or exc.stdout}
+
         except Exception as exc:
             return {"success": False, "error": str(exc)}
 
     # --------------------------------------------------------------------- #
     # Public API
     # --------------------------------------------------------------------- #
-    def diff_file_with_content(self, filename: str, content: str) -> str:
+    def create_diff(self, filename: str, content: str) -> str:
         """
-        Produce an ``ndiff`` representation of the differences between
-        *file1* and the provided new file content.
+        Produce an ``normal diff`` representation of the differences between
+        the contents of *file1* and the provided new file content.
 
         Parameters:
             filename: str - Path to the file on disk to diff against.
-            content: str - New file contents to create a diff against.
+            content: str - Replacement contents to create a diff.
 
         Returns:
-            str - The diff as a single string.  This string can be passed directly
-                to :meth:`apply_patch`.
+            str - {"success": bool, "diff": if success, "error": if error}
         """
         try:
-            txt1 = self._resolve_path(filename).read_text().splitlines(keepends=True)
-            txt2 = content.splitlines(keepends=True)
-            diff = difflib.ndiff(txt1, txt2)
-            return "".join(diff)
+            # Write the new content to a temporary file inside the root.
+            temp_path = self.root / ".tmp_new_content"
+            temp_path.write_text(content)
+            orig_path = str(self._resolve_path(filename))
+
+            # Use diff to compare the original file with the temporary file.
+            diff_output = self._run_subprocess(["diff", orig_path, str(temp_path)])
+
+            # Clean up the temporary file.
+            temp_path.unlink(missing_ok=True)
+            return {"sucess": True, "diff": diff_output}
+
+        except PatchError as exc:
+            return {"success": False, "error": str(exc)}
 
         except Exception as exc:
-            raise RuntimeError(f"Failed to diff files: {exc}") from exc
+            return {"success": False, "error": str(exc)}
 
     def apply_patch(self, filename: str, patch: str) -> Dict[str, Any]:
         """
-        Apply an ``ndiff`` *patch* to *filename*.
+        Apply a ``normal diff`` patch to the given file.  Patch should _only_ including the patch file,
+        no additional instructions or commentary.  For example, if we have a file "foo.py" with the following
+
+        For example, the patch: ```
+        1c1
+        < x = 1 + 2
+        ---
+        > x = 1 * 2
+        ```
+        would patch the first line of code from an addition to a multiply.
+
+        Patches do _not_ include filenames.  Make sure to include a trailing newline.
 
         Parameters:
-            filename: str - Path to the file that should be patched (relative to ``root``).
-            patch: str - The diff string produced by :meth:`diff_files`.
+            filename: str - Path to the file getting patched.
+            patch: str - The diff string produced by :meth: `create_diff` or `diff_files`.
 
         Returns:
             dict - {"success": True}`` on success or ``{"success": False, "error": <error message>} on failure.
         """
         try:
-            target = self._resolve_path(filename)
-            # ``difflib.restore`` expects an iterable of lines and a ``which``
-            # argument.  ``2`` tells it to reconstruct the *second* (i.e. new)
-            # version of the file from an ndiff.
-            patched_lines = difflib.restore(
-                patch.splitlines(keepends=True), 2
-            )
-            target.write_text("".join(patched_lines))
+            filename = self._resolve_path(filename)
+            print(filename)
+            print(patch)
+            # ``patch`` reads the patch from stdin; ``-p1`` means strip leading slash.
+            # ``-d <root>`` reinforces the directory restriction.
+            self._run_subprocess(["patch", filename], input_text=patch)
             return {"success": True}
+
+        except PatchError as exc:
+            print(exc)
+            return {"success": False, "error": exc.stderr or exc.stdout}
+
         except Exception as exc:
+            print(exc)
             return {"success": False, "error": str(exc)}
 

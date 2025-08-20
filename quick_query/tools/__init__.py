@@ -29,17 +29,24 @@ def _resolve_type(annotation):
 
     return "string"
 
-
 def _parse_param_docs(doc):
     if not doc:
         return {}
 
-    params, in_args, current = {}, False, None
+    method_doc = []
+    params = {}
+    in_description = True
+    in_args = False
+    current = None
     for line in doc.splitlines():
         s = line.strip()
-        if s.startswith(("Args:", "Parameters:")):
+        if s.startswith(("Args:", "Parameters:", "Arguments:")):
             in_args = True
+            in_description = False
             continue
+
+        if in_description:
+            method_doc.append(line.strip())
 
         if not in_args:
             continue
@@ -55,7 +62,7 @@ def _parse_param_docs(doc):
         elif current:
             params[current] += " " + s
 
-    return params
+    return '\n'.join(method_doc), params
 
 
 def make_tool_metadata(func):
@@ -69,8 +76,7 @@ def make_tool_metadata(func):
     """
     sig = inspect.signature(func)
     doc = inspect.getdoc(func) or ""
-    desc = doc.splitlines()[0] if doc else ""
-    param_docs = _parse_param_docs(doc)
+    method_doc, param_docs = _parse_param_docs(doc)
 
     # get parameter list; if first is 'self' or 'cls', drop it
     params = list(sig.parameters.values())
@@ -99,7 +105,7 @@ def make_tool_metadata(func):
         "type": "function",
         "function": {
             "name": func.__name__,
-            "description": desc,
+            "description": method_doc,
             "parameters": {
                 "type": "object",
                 "properties": properties,

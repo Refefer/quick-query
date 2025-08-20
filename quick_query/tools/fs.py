@@ -1,5 +1,6 @@
 import atexit
 import pathlib
+import tempfile
 from typing import List, Dict, Any, Optional
 
 class FileSystem:
@@ -77,7 +78,7 @@ class FileSystem:
         -------
         str - {"success": true, "path": "path/to/file"} or {"success": false, "error": str}
         """
-        target_dir = self.resolve_path(dir)
+        target_dir = self.resolve_path(dirname)
         if not target_dir.is_dir():
             return {"success": False, "error": f"{target_dir} is not a directory."}
 
