@@ -110,13 +110,18 @@ class Coding:
     def diff_files(self, file1: str, file2: str) -> str:
         """
         Produce an ``normal diff`` representation of the differences between
-        *file1* and *file2*.  For example, if the only difference between two files was the first line,
-        a patch might look like: ```
+        *file1* and *file2*.  This is _not_ a unified diff format: for exammple, 
+        if the only difference between two files was the first line,
+        a patch might look like: 
+
+        ```
         1c1
         < x = 1 + 2
         ---
         > x = 1 * 2
         ```
+
+        Make sure to not use a unified-diff format. 
 
         Using create_temp_file, followed by a write_file, and then diff_files will provide a correct
         patch in all cases.

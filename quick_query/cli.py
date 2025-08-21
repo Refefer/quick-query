@@ -284,7 +284,7 @@ def parse_arguments() -> argparse.Namespace:
 
     subparsers = parser.add_subparsers(
         dest="mode",
-        required=True,
+        required=False,
         help="Which mode to run qq",
     )
 
@@ -379,6 +379,18 @@ def parse_arguments() -> argparse.Namespace:
 
 def cli_entrypoint():
     args = parse_arguments()
+    # If no mode was provided (i.e., no subcommand), default to "chat"
+    if args.mode is None:
+        args.mode = "chat"
+        # Auto‑enable markdown formatting if the ``rich`` library is available
+        # and the user hasn't explicitly disabled it.
+        if not args.format_markdown:
+            try:
+                import rich  # noqa: F401
+                args.format_markdown = True
+            except ImportError:
+                pass
+
     if args.mode == "list":
         list_settings(args)
         sys.exit(0)
