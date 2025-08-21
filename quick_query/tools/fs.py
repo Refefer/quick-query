@@ -63,7 +63,7 @@ class FileSystem:
 
         self._temp_files.clear()
 
-    def create_temp_file(self, dirname: str) -> str:
+    def create_temp_file(self, dirname: str, content: str | None) -> str:
         """Create an empty temporary file with a random name inside *dir*.  This
         method is useful for creating a file to write a code change to and then diffing
         it with the original.
@@ -73,10 +73,11 @@ class FileSystem:
 
         Parameters:
             dirname: str - Relative directory (under the managed root) where the temporary file should be placed.
+            dirname: optional str - If provided, writes the content to the new file.
 
         Returns
         -------
-        str - {"success": true, "path": "path/to/file"} or {"success": false, "error": str}
+        str - {"success": true, "path": "path/to/temp/file"} or {"success": false, "error": str}
         """
         target_dir = self.resolve_path(dirname)
         if not target_dir.is_dir():
@@ -88,6 +89,10 @@ class FileSystem:
         tmp.close()
 
         self._temp_files.append(tmp_path)
+        if content is not None:
+            with open(tmp_path, 'w') as out:
+                out.write(content)
+
         rel_path = str(tmp_path.resolve())[self.root_len:]
         return {"success": True, "path": rel_path}
 

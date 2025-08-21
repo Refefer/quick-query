@@ -5,10 +5,6 @@ coding.py
 Utility class for performing simple code‑related operations using only the
 Python standard library.  The implementation mirrors the style of `fs.py`,
 including type hints, docstrings, and basic error handling.
-
-**Note:** This version now relies on the external ``diff`` and ``patch``
-utilities, which are standard on Linux/macOS (WSL is also supported).  All
-operations are confined to the ``root`` directory supplied to ``Coding``.
 """
 
 from __future__ import annotations
@@ -122,6 +118,9 @@ class Coding:
         > x = 1 * 2
         ```
 
+        Using create_temp_file, followed by a write_file, and then diff_files will provide a correct
+        patch in all cases.
+
         Parameters:
             file1: str - Path to the file on disk to diff against.
             file2: str - Path to the file on disk to diff.
@@ -135,45 +134,11 @@ class Coding:
             path1 = str(self._resolve_path(file1))
             path2 = str(self._resolve_path(file2))
             # ``diff -u`` produces a unified diff.
-            diff_output = self._run_subprocess(["diff", "-u", path1, path2])
+            diff_output = self._run_subprocess(["diff", path1, path2])
             return {"success": True, "diff": diff_output}
 
         except PatchError as exc:
             return {"success": False, "error": exc.stderr or exc.stdout}
-
-        except Exception as exc:
-            return {"success": False, "error": str(exc)}
-
-    # --------------------------------------------------------------------- #
-    # Public API
-    # --------------------------------------------------------------------- #
-    def create_diff(self, filename: str, content: str) -> str:
-        """
-        Produce an ``normal diff`` representation of the differences between
-        the contents of *file1* and the provided new file content.
-
-        Parameters:
-            filename: str - Path to the file on disk to diff against.
-            content: str - Replacement contents to create a diff.
-
-        Returns:
-            str - {"success": bool, "diff": if success, "error": if error}
-        """
-        try:
-            # Write the new content to a temporary file inside the root.
-            temp_path = self.root / ".tmp_new_content"
-            temp_path.write_text(content)
-            orig_path = str(self._resolve_path(filename))
-
-            # Use diff to compare the original file with the temporary file.
-            diff_output = self._run_subprocess(["diff", orig_path, str(temp_path)])
-
-            # Clean up the temporary file.
-            temp_path.unlink(missing_ok=True)
-            return {"sucess": True, "diff": diff_output}
-
-        except PatchError as exc:
-            return {"success": False, "error": str(exc)}
 
         except Exception as exc:
             return {"success": False, "error": str(exc)}
@@ -191,7 +156,8 @@ class Coding:
         ```
         would patch the first line of code from an addition to a multiply.
 
-        Patches do _not_ include filenames.  Make sure to include a trailing newline.
+        Patches do _not_ include filenames.  Make sure to include a trailing newline.  Even if a 'apply_patch'
+        completes successfully, confirm the contents of the file match expectations.
 
         Parameters:
             filename: str - Path to the file getting patched.
@@ -202,8 +168,6 @@ class Coding:
         """
         try:
             filename = self._resolve_path(filename)
-            print(filename)
-            print(patch)
             # ``patch`` reads the patch from stdin; ``-p1`` means strip leading slash.
             # ``-d <root>`` reinforces the directory restriction.
             self._run_subprocess(["patch", filename], input_text=patch)
