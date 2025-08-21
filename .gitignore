@@ -56,3 +56,7 @@ venv.bak/
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
+
+# Vim swap files
+*.swp
+*.swo
