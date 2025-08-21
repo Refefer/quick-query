@@ -148,9 +148,9 @@ class ToolsToggle(Command):
     ) -> bool:
         """Handle three sub‑commands:
         
-        * ``/tools enable <tool_name>`` \u2013 turn a tool **on**
-        * ``/tools disable <tool_name>`` \u2013 turn a tool **off**
-        * ``/tools list`` \u2013 show every tool and whether it is enabled
+        * ``/tools enable <tool_name>`` – turn a tool **on**
+        * ``/tools disable <tool_name>`` – turn a tool **off**
+        * ``/tools list`` – show every tool and whether it is enabled
         """
         parts = user_input.strip().split()
         if len(parts) < 2:
@@ -190,7 +190,7 @@ class ToolsToggle(Command):
 
     def _list_tools(self, chat) -> None:
         """Print a nicely formatted table of all registered tools.
-        Each line shows the tool name and a \u2705/\u274c indicator for its enabled state.
+        Each line shows the tool name and a ✅/❌ indicator for its enabled state.
         """
         tools = getattr(chat.server, "tools", {})
         if not tools:
@@ -200,8 +200,59 @@ class ToolsToggle(Command):
         print("\nAvailable tools:")
         for name, tool in sorted(tools.items()):
             enabled = getattr(tool, "enabled", True)
-            status = "\u2705 enabled" if enabled else "\u274c disabled"
+            status = "✅ enabled" if enabled else "❌ disabled"
             print(f"  {name:<20} {status}")
+
+class Compact(Command):
+    """Summarise the current conversation and reset it.
+
+    The command:
+    1. Makes sure any pending tool calls are fully processed.
+    2. Sends a special *compaction* prompt to the model.
+    3. Appends the returned summary to the original system prompt.
+    4. Trims the message history back to that (augmented) system prompt.
+    """
+
+    cmd = "compact"
+
+    COMPACT_PROMPT = (
+        "Please provide a concise summary of the entire conversation up to this point, "
+        "including any tool interactions, key decisions, and important details."
+    )
+
+    def process(
+        self,
+        chat: "Chat",
+        user_input: str,
+        buffer: List[str],
+    ) -> bool:
+        # 1. Finish any pending tool processing
+        chat._process_all_pending_tools()
+
+        # 2. Send the compaction prompt
+        chat.messages.append(
+            chat.message_processor.process_user_prompt(self.COMPACT_PROMPT)
+        )
+        chat._process_response()
+
+        # The assistant's summary should be the last message
+        summary = chat.messages[-1].get("content", "")
+        if not summary:
+            print("Compaction produced an empty summary – aborting.")
+            return True
+
+        # 3. Append summary to the system prompt (first message)
+        if chat.messages and chat.messages[0]["role"] == "system":
+            chat.messages[0]["content"] += f"\n\n---\nConversation summary:\n{summary}"
+        else:
+            # No system prompt existed – create one
+            chat.messages.insert(0, {"role": "system", "content": summary})
+
+        # 4. Reset history to just the system prompt
+        chat.messages = chat.messages[:1]
+        chat.orig_message_len = len(chat.messages)
+        print("Conversation compacted and reset.")
+        return True
 
 class Chat:
     """Encapsulates a conversational session with command handling."""
@@ -220,7 +271,7 @@ class Chat:
         Args:
             initial_state: Object containing prompts and configuration.
             server: Backend that provides ``send_chat_completion`` and tool calls.
-            stream_processor: Converts raw streaming chunks into higher\u2011level blocks.
+            stream_processor: Converts raw streaming chunks into higher‑level blocks.
             formatter: Formats processed blocks for display.
             message_processor: Handles conversion of raw text to chat messages.
             needs_buffering: Whether the formatter requires output buffering.
@@ -236,23 +287,23 @@ class Chat:
         self.orig_message_len: int = len(self.messages)
         self.commands: Dict[str, Command] = {}
 
-        for cmd_cls in (Reset, Save, Undo, Redo, Pretty, Multiline, ToolsToggle):
+        for cmd_cls in (Reset, Save, Undo, Redo, Pretty, Multiline, ToolsToggle, Compact):
             self.add_command(cmd_cls())
 
     def _show_loaded_tools(self) -> None:
         """
         Print a single sorted line summarising loaded tools with enabled/disabled status.
-        Example format: ``Loaded tools: [\u2705 tool_a] [\u274c tool_b]``
+        Example format: ``Loaded tools: [✅ tool_a] [❌ tool_b]``
         """
         tools = getattr(self.server, "tools", {})
         if not tools:
             return
 
-        # Build a list of "[\u2705 name]" or "[\u274c name]" entries, sorted by name.
+        # Build a list of "[✅ name]" or "[❌ name]" entries, sorted by name.
         parts = []
         for name, tool in sorted(tools.items()):
             enabled = getattr(tool, "enabled", True)
-            indicator = "\u2705" if enabled else "\u274c"
+            indicator = "✅" if enabled else "❌"
             parts.append(f"[{indicator} {name}]")
 
         print("Loaded tools:", " ".join(parts))
@@ -287,7 +338,7 @@ class Chat:
     def add_command(self, command: Command) -> None:
         """Register a command instance with the chat."""
         if not command.cmd:
-            raise ValueError("Command must define a non\u2011empty ``cmd`` attribute.")
+            raise ValueError("Command must define a non‑empty ``cmd`` attribute.")
 
         self.commands[command.cmd] = command
 
@@ -324,6 +375,45 @@ class Chat:
 
         return "\n".join(buffer)
 
+    def _process_response(self) -> None:
+        """Send the current message list to the server and handle the response.
+        This includes normal assistant replies as well as tool call handling.
+        """
+        chunk_stream = self.server.send_chat_completion(self.messages)
+        cot_stream = self.stream_processor.process_stream(chunk_stream)
+        response = dict(
+            process_streaming_response(
+                cot_stream,
+                self.formatter,
+                self.needs_buffering,
+            )
+        )
+
+        if TagTypes.Tool_calls in response:
+            tc = response[TagTypes.Tool_calls]
+            self.messages.append(
+                self.message_processor.process_tool_request(tc)
+            )
+            tool_resp = self.server.process_tool_call(tc)
+            self.messages.append(
+                self.message_processor.process_tool_response(tool_resp)
+            )
+        else:
+            self.messages.append({"role": "assistant", "content": response["content"]})
+            if not self.messages[-1]["content"].endswith("\n"):
+                print()
+            print("=" * 10)
+
+    def _process_all_pending_tools(self) -> None:
+        """Repeatedly process responses while the last assistant message contains tool calls.
+        Ensures that any chain of tool interactions is fully resolved before proceeding.
+        """
+        while True:
+            if self.messages and self.messages[-1].get("role") == "assistant" and "tool_calls" in self.messages[-1]:
+                self._process_response()
+            else:
+                break
+
     def run_loop(self):
         """
         Main chat loop that processes user input and model responses.
@@ -339,33 +429,8 @@ class Chat:
                     self.message_processor.process_user_prompt(user_input)
                 )
 
-            chunk_stream = self.server.send_chat_completion(self.messages)
-            cot_stream = self.stream_processor.process_stream(chunk_stream)
-            response = dict(
-                process_streaming_response(
-                    cot_stream,
-                    self.formatter,
-                    self.needs_buffering,
-                )
-            )
-
-            if TagTypes.Tool_calls in response:
-                tc = response[TagTypes.Tool_calls]
-                self.messages.append(
-                    self.message_processor.process_tool_request(tc)
-                )
-                tool_resp = self.server.process_tool_call(tc)
-                self.messages.append(
-                    self.message_processor.process_tool_response(tool_resp)
-                )
-            else:
-                self.messages.append(
-                    {"role": "assistant", "content": response["content"]}
-                )
-                if not self.messages[-1]["content"].endswith("\n"):
-                    print()
-                print("=" * 10)
-
+            # Process the assistant (or tool) response
+            self._process_response()
 
     def run(self) -> None:
         """Kicks off the chat loop."""

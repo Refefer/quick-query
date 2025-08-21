@@ -110,7 +110,7 @@ class Coding:
     def diff_files(self, file1: str, file2: str) -> str:
         """
         Produce an ``normal diff`` representation of the differences between
-        *file1* and *file2*.  This is _not_ a unified diff format: for exammple, 
+        *file1* and *file2*.  This is _not_ a unified diff format: for example, 
         if the only difference between two files was the first line,
         a patch might look like: 
 
@@ -150,10 +150,8 @@ class Coding:
 
     def apply_patch(self, filename: str, patch: str) -> Dict[str, Any]:
         """
-        Apply a ``normal diff`` patch to the given file.  Patch should _only_ including the patch file,
-        no additional instructions or commentary.  For example, if we have a file "foo.py" with the following
-
-        For example, the patch: ```
+        Apply a ``normal diff`` patch to the given file.  A patch is created from using ``diff_files``.
+        For example, if we have a file "foo.py" with the following patch: ```
         1c1
         < x = 1 + 2
         ---
