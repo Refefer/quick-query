@@ -1,6 +1,8 @@
 import atexit
 import pathlib
 import tempfile
+import shutil
+import os
 from typing import List, Dict, Any, Optional
 
 class FileSystem:
@@ -178,6 +180,62 @@ class FileSystem:
             path = self.resolve_path(path)
             path.unlink()
             return {"success": True}
+
+        except Exception as e:
+            return {"success": False, "error": e.__class__.__name__}
+
+    def create_directory(self, path: str) -> Dict[str, Any]:
+        """Create a new directory within the managed root.
+
+        Parameters:
+        path: str - Relative path of the directory to create.
+
+        Returns:
+            dict - {"success": True, "content": True} on success.  If the directory
+                already exists, this is treated as a successful no‑op.  On failure the
+                dictionary contains {"success": False, "error": "<ExceptionName>"}.
+
+        """
+        try:
+            dir_path = self.resolve_path(path)
+            if dir_path.is_dir():
+                return {"success": True, "content": True}
+
+            os.makedirs(dir_path, exist_ok=True)
+            return {"success": True, "content": True}
+
+        except Exception as e:
+            return {"success": False, "error": e.__class__.__name__}
+
+    def move_file(self, src: str, dest: str) -> Dict[str, Any]:
+        """
+        Move a file from ``src`` to ``dest``.  
+
+        Parameters:
+            src: str  - Relative path of the source file to be moved.
+            dest: str - Relative path of the destination **file**.  The parent directory
+                        must already exist; the method does **not** create missing
+                        directories.
+
+        Returns:
+            dict - {"success": True, "content": True} on success or {"success": False, "error": <ExceptionName>} on failure.
+
+        """
+        try:
+            src_path = self.resolve_path(src)
+            dest_path = self.resolve_path(dest)
+
+            # Ensure source exists
+            if not src_path.is_file():
+                raise FileNotFoundError(f"Source file not found: {src}")
+
+            # Ensure destination directory exists
+            dest_dir = dest_path.parent
+            if not dest_dir.is_dir():
+                raise FileNotFoundError(f"Destination directory not found: {dest_dir}")
+
+            shutil.move(str(src_path), str(dest_path))
+            return {"success": True, "content": True}
 
         except Exception as e:
             return {"success": False, "error": e.__class__.__name__}

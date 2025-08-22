@@ -123,8 +123,12 @@ class Coding:
 
         Make sure to not use a unified-diff format. 
 
-        Using create_temp_file, followed by a write_file, and then diff_files will provide a correct
-        patch in all cases.
+        The most effective way to patch a file is as follows:
+        1. create_temp_file: creates a temp file with content.
+        2. diff_files: Creates a diff for user approval.
+        3. apply_patch: applies the patch to the given file.
+        or
+        3. move_file: replace the original file with the temp file.
 
         Parameters:
             file1: str - Path to the file on disk to diff against.

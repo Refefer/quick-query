@@ -367,11 +367,11 @@ class Chat:
                 continue_loop = cmd.process(self, user_input, buffer)
                 if continue_loop:
                     continue
-                break
 
             else:
                 buffer.append(user_input)
-                break
+
+            break
 
         return "\n".join(buffer)
 
