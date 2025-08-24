@@ -93,6 +93,7 @@ def send_chat_completion(
     messages: List[Dict[str, str]],
     tools: Optional[Dict[str, Tool]] = None,
     stream: bool = True,
+    parameters: Optional[Dict[str, Any]] = None,
 ) -> Generator[str, None, None]:
     """
     Streams responses from an OpenAI-compatible chat/completions endpoint in real-time.
@@ -103,6 +104,9 @@ def send_chat_completion(
     model (str): The model name to use for the request
     api_key (str): The API key for authentication.
     messages (List[Dict[str, str]]): Messages to send to the completion api
+    tools (Optional[Dict[str, Tool]]): Optional tool specifications
+    stream (bool): Whether to request streaming responses
+    parameters (Optional[Dict[str, Any]]): Additional server parameters (e.g., temperature, top_p)
 
     Yields:
         Requests.Response
@@ -121,6 +125,14 @@ def send_chat_completion(
         enabled_tools = [tool.function_spec for tool in tools.values() if tool.enabled]
         if len(enabled_tools) > 0:
             data['tools'] = enabled_tools
+
+    # Merge any additional parameters into the request payload
+    if parameters:
+        data.update(parameters)
+
+    with open('/tmp/log', 'w') as out:
+        import json
+        out.write(json.dumps(data))
 
     url = f"{host}/chat/completions"
     return requests.post(url, headers=headers, json=data, stream=stream)
@@ -142,7 +154,9 @@ def stream_deltas(response, stream):
                 continue
 
             json_data = try_json(content)
-            yield json_data['choices'][0]['delta']
+            choices = json_data['choices']
+            if len(choices) > 0:
+                yield choices[0]['delta']
 
         elif not stream:
             json_data = try_json(line_data)
@@ -208,7 +222,8 @@ class OpenAIServer:
         model: str,
         think_tag: str,
         structured_stream: bool,
-        tools: Optional[Dict[str, Tool]]
+        tools: Optional[Dict[str, Tool]],
+        parameters: Optional[Dict[str, Any]] = None,
     ):
         self.host = host
         self.api_key = api_key
@@ -216,10 +231,11 @@ class OpenAIServer:
         self.think_tag = think_tag
         self.structured_stream = structured_stream
         self.tools = tools
+        self.parameters = parameters or {}
 
     def send_chat_completion(self, messages):
         stream = not self.tools or self.structured_stream
-        response = send_chat_completion(self.host, self.api_key, self.model, messages, self.tools, stream)
+        response = send_chat_completion(self.host, self.api_key, self.model, messages, self.tools, stream, self.parameters)
         return stream_response_chunks(response, stream)
  
     def process_tool_call(self, payload):
@@ -227,4 +243,3 @@ class OpenAIServer:
         payload['content'] = evaluation
         payload['tool_call_id'] = payload['id']
         return payload
-

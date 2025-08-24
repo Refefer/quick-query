@@ -97,7 +97,7 @@ def read_profiles(config_path: str) -> List[Profile]:
             cred_dict = credentials_section.get(cred_key, {})
 
         # Pull known fields; anything else goes into ``extra``
-        known_keys = {"model", "tools", "prompt", "structured_streaming", "credentials"}
+        known_keys = {"model", "tools", "prompt", "structured_streaming", "credentials", "parameters"}
         extra: Dict[str, Any] = {k: v for k, v in (raw or {}).items() if k not in known_keys}
 
         profile_obj = Profile(
@@ -107,6 +107,7 @@ def read_profiles(config_path: str) -> List[Profile]:
             tools=raw.get("tools") if isinstance(raw, Mapping) else None,
             prompt_name=raw.get("prompt") if isinstance(raw, Mapping) else None,
             structured_streaming=raw.get("structured_streaming") if isinstance(raw, Mapping) else None,
+            parameters=raw.get("parameters") if isinstance(raw, Mapping) else None,
             extra=extra,
         )
         result.append(profile_obj)

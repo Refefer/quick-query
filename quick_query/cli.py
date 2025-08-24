@@ -67,6 +67,10 @@ def list_settings(args):
             if profile.tools:
                 print(f" -tools: {profile.tools}")
 
+            # Show any custom server parameters defined in the profile.
+            if profile.parameters:
+                print(f" -parameters: {profile.parameters}")
+
             # Credentials – redact the api_key but show other keys.
             for cred_key, cred_val in profile.credentials.items():
                 if cred_key == 'api_key':
@@ -144,7 +148,9 @@ def setup_api_params(args):
 
     tools = tools if tools else None
 
-    return OpenAIServer(host, api_key, model, args.cot_token, structured_streaming, tools), profile
+    # Forward any extra request parameters defined in the profile.
+    # The Profile.parameters field may be None; OpenAIServer will default to an empty dict.
+    return OpenAIServer(host, api_key, model, args.cot_token, structured_streaming, tools, profile.parameters), profile
 
 
 class InitialState:

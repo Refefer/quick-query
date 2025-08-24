@@ -6,7 +6,7 @@ The project's configuration file (a TOML file) contains a top‑level ``profile`
 where each entry defines a named set of settings (model, credentials, tools, etc.).
 This module defines a small, immutable dataclass that stores those settings.
 
-The class purposefully does **not** perform any I/O – loading from the TOML file is
+The class purposefully does **not** perform any I/O — loading from the TOML file is
 handled by helper functions in ``quick_query.config`` (see the upcoming
 ``read_profiles`` implementation).  Keeping the data class I/O‑free makes it easy
 to instantiate programmatically and simplifies testing.
@@ -27,9 +27,9 @@ class Profile:
     name: str
         The identifier used in the TOML file (e.g. ``default``).
     model: Optional[str]
-        Name of the model to use; may be ``None`` to let the server decide.
+        Name of the model to use for the request; may be ``None`` to let the server decide.
     credentials: Dict[str, Any]
-        Dictionary of credential fields (e.g. ``host`` and ``api_key``) after
+        Dictionary of credential fields (e.g., ``host`` and ``api_key``) after
         the reference in the profile has been resolved.
     tools: Optional[List[str]]
         List of tool specifications defined for this profile.
@@ -38,6 +38,10 @@ class Profile:
     structured_streaming: Optional[bool]
         Whether the model should use structured streaming.  This mirrors the
         existing ``structured_streaming`` key that may appear in a profile.
+    parameters: Optional[Dict[str, Any]]
+        Additional request parameters (e.g., ``{"temperature": 0.9, "minP": 0.01}``).
+        These are forwarded directly to the OpenAI‑compatible endpoint.
+        The client does **not** validate these values; they are sent as‑is.
     extra: Dict[str, Any]
         Catch‑all for any additional keys present in the TOML profile that
         are not explicitly modelled above.
@@ -49,6 +53,7 @@ class Profile:
     tools: Optional[List[str]] = None
     prompt_name: Optional[str] = None
     structured_streaming: Optional[bool] = None
+    parameters: Optional[Dict[str, Any]] = None  # extra request arguments (e.g., temperature, min_p) forwarded verbatim to the server.
     extra: Dict[str, Any] = field(default_factory=dict)
 
     def get_prompt_name(self) -> Optional[str]:
@@ -65,6 +70,7 @@ class Profile:
             "tools": self.tools,
             "prompt": self.prompt_name,
             "structured_streaming": self.structured_streaming,
+            "parameters": self.parameters,
         }
         # Remove ``None`` values to keep the dict tidy.
         return {k: v for k, v in {**base, **self.extra}.items() if v is not None}

@@ -8,6 +8,9 @@ tools = "$HOME/.config/quick-query/tools.toml"
 credentials = "openai"
 model = 'o4-mini'
 prompt = "code-assistant"
+parameters = {
+    "topK": 20
+}
 
 [credentials.local]
 host = "http://localhost:12345/v1"
