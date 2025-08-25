@@ -3,6 +3,8 @@ import pathlib
 import tempfile
 import shutil
 import os
+import subprocess
+import re 
 from typing import List, Dict, Any, Optional
 
 class FileSystem:
@@ -209,7 +211,8 @@ class FileSystem:
 
     def move_file(self, src: str, dest: str) -> Dict[str, Any]:
         """
-        Move a file from ``src`` to ``dest``.  
+        Move a file from ``src`` to ``dest``.  If the file at ``dest`` already exists,
+        it is overwritten.
 
         Parameters:
             src: str  - Relative path of the source file to be moved.
@@ -239,5 +242,103 @@ class FileSystem:
 
         except Exception as e:
             return {"success": False, "error": e.__class__.__name__}
+    
+    def search_by_regex(self, path: str, regex: str, context: int) -> Dict[str, Any]:
+        """Search files under `path` for a regular expression using egrep.
 
+        Parameters:
+            path (str): Relative directory inside the managed root where the search starts.
+            regex (str): The regular expression pattern to match.
+            context (int): Number of surrounding lines to include as context.
+
+        Returns:
+            dict: On success {"success": True, "content": <string>} containing the formatted egrep output with file paths converted to relative form.  
+                  On failure {"success": False, "error": <error_message>}
+        """
+        try:
+            # Resolve the base directory; this also validates that it is within the root.
+            base_path = self.resolve_path(path)
+
+            # Build the egrep command.  -R for recursive, -C<cnt> for context lines.
+            cmd = ["egrep", "-R", f"-C{context}", regex, "-n", str(base_path)]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            # egrep returns 0 if matches found, 1 if none, >1 for errors.
+            if result.returncode not in (0, 1):
+                return {"success": False, "error": f"egrep failed: {result.stderr.strip()}"}
+
+            output = result.stdout
+            # Convert any absolute file paths in the output to relative paths.
+            lines = []
+            for line in output.splitlines():
+                line = line.rstrip('\n')
+                if line == '--':
+                    lines.append(line)
+                    continue
+
+                parsed = parse_egrep_line(line)
+                if parsed is None:
+                    continue
+
+                abs_path = pathlib.Path(parsed['filename']).resolve()
+                rel_path = str(abs_path)[self.root_len:]
+                parsed['filename'] = rel_path
+                delim = '-' if parsed['context'] else ':'
+                lines.append(f"{rel_path}{delim}{parsed['lineno']}{delim}{parsed['content']}")
+
+            return {"success": True, "content": '\n'.join(lines)}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------- 
+# Regex that recognises BOTH egrep formats: 
+# 
+#   1) Context lines (surrounding the match) 
+#        <filename>-<lineno>- 
+#   2) The matching line itself 
+#        <filename>:<lineno>: 
+# 
+#   • <filename> may contain spaces, hyphens, dots, colons, etc. 
+#   • The line‑content part (everything after the last delimiter) 
+#     is captured unchanged. 
+# ---------------------------------------------------------------------- 
+EGREP_LINE_RE = re.compile(r''' 
+    ^                                   # start of line 
+    (?P<filename>.+?)                   # filename – lazy so it stops at the first delimiter 
+    (?:                                 # non‑capturing group for the two possible delimiters 
+        ([-:])(?P<lineno>\d+)\2         #   a) context line  → “-23-” 
+    ) 
+    (?P<content>.*)                     # the rest of the line (the source code) 
+    $                                   # end of line 
+''', re.VERBOSE) 
+
+def parse_egrep_line(line: str) -> Dict:  
+    """ 
+    Parse a single egrep output line. 
+
+    Returns 
+    ------- 
+    dict | None 
+        ``{'filename': ..., 'lineno': int, 'is_match': bool, 'content': ...}`` 
+        or ``None`` if the line does not match the expected format. 
+    """ 
+    m = EGREP_LINE_RE.match(line) 
+    if not m: 
+        return None 
+
+    # ``lineno`` is always present – convert it to int 
+    lineno = int(m.group('lineno')) 
+
+    # If the delimiter that was used is a colon, this line is the *match*. 
+    # The context form uses the dash‑dash pattern. 
+    is_match = ':' in line.split(str(lineno))[0]   # simple but reliable 
+
+    return { 
+        'filename': m.group('filename'), 
+        'lineno'  : lineno, 
+        'context': not is_match, 
+        'content' : m.group('content') 
+    } 
 
