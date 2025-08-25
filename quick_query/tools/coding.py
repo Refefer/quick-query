@@ -126,9 +126,9 @@ class Coding:
         The most effective way to patch a file is as follows:
         1. create_temp_file: creates a temp file with content.
         2. diff_files: Creates a diff for user approval.
-        3. apply_patch: applies the patch to the given file.
+        3. move_file: overwrite the original file with the temp file.
         or
-        3. move_file: replace the original file with the temp file.
+        3. apply_patch: applies the patch to the given file.
 
         Parameters:
             file1: str - Path to the file on disk to diff against.
