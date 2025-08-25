@@ -74,7 +74,7 @@ def list_settings(args):
             # Credentials – redact the api_key but show other keys.
             for cred_key, cred_val in profile.credentials.items():
                 if cred_key == 'api_key':
-                    cred_value = '***'
+                    cred_val = '***'
 
                 print(f" -{cred_key}: {cred_val}")
 
