@@ -1,13 +1,20 @@
+"""FileSystem implementation that inherits from RootedBase.
+"""
+from __future__ import annotations
+
 import atexit
 import pathlib
 import tempfile
 import shutil
 import os
 import subprocess
-import re 
+import re
 from typing import List, Dict, Any, Optional
 
-class FileSystem:
+from .base import RootedBase
+
+
+class FileSystem(RootedBase):
     """Utility class for safe file operations within a designated root directory."""
 
     def __init__(self, root: str) -> None:
@@ -17,42 +24,11 @@ class FileSystem:
         Parameters:
             root: str - Path to the root directory.
         """
-        try:
-            self.root = pathlib.Path(root).resolve(strict=True)
-            self.root_len = len(str(self.root).rstrip("/"))
-        except FileNotFoundError as e:
-            raise IOError(f"Invalid root path: {str(e)}") from e
-        except Exception:
-            raise
-
-        if not self.root.is_dir():
-            raise NotADirectoryError(f"'{root}' is not a valid directory")
-
+        super().__init__(root)
         # Keep track of temporary files created via ``create_temp_file`` so we can
         # clean them up automatically when the interpreter exits.
         self._temp_files: List[pathlib.Path] = []
         atexit.register(self._cleanup_temp_files)
-
-    def resolve_path(self, path: str) -> pathlib.Path:
-        """
-        Safely resolve a user-provided path relative to the root directory.
-
-        Parameters:
-            path: str - Relative path to resolve.
-
-        Returns:
-            pathlib.Path - Resolved absolute path.
-
-        Raises:
-            FileNotFoundError: If the resolved path is outside the root.
-        """
-        stripped_path = path.lstrip("/")
-        resolved_path = (self.root / stripped_path).resolve(strict=False)
-
-        if not resolved_path.is_relative_to(self.root):
-            raise FileNotFoundError(f"File Not Found: {path}")
-
-        return resolved_path
 
     def _cleanup_temp_files(self) -> None:
         """Remove any temporary files that were created during this session.
@@ -66,8 +42,8 @@ class FileSystem:
                 temp_path.unlink()
 
         self._temp_files.clear()
-
-    def create_temp_file(self, dirname: str, content: str | None) -> str:
+    
+    def create_temp_file(self, dirname: str, content: str | None) -> Dict[str, Any]:
         """Create an empty temporary file with a random name inside *dir*.  This
         method is useful for creating a file to write a code change to and then diffing
         it with the original.
@@ -77,11 +53,11 @@ class FileSystem:
 
         Parameters:
             dirname: str - Relative directory (under the managed root) where the temporary file should be placed.
-            dirname: optional str - If provided, writes the content to the new file.
+            content: optional str - If provided, writes the content to the new file.
 
         Returns
         -------
-        str - {"success": true, "path": "path/to/temp/file"} or {"success": false, "error": str}
+        dict - {"success": true, "path": "relative/path/to/temp/file"} or {"success": false, "error": "..."}
         """
         target_dir = self.resolve_path(dirname)
         if not target_dir.is_dir():
@@ -94,7 +70,7 @@ class FileSystem:
 
         self._temp_files.append(tmp_path)
         if content is not None:
-            with open(tmp_path, 'w') as out:
+            with open(tmp_path, "w") as out:
                 out.write(content)
 
         rel_path = str(tmp_path.resolve())[self.root_len:]
@@ -138,11 +114,10 @@ class FileSystem:
         except Exception as e:
             return {"success": False, "error": e.__class__.__name__}
 
-    def list_files(self, path: Optional[str]) -> Dict[str, Any]:
+    def list_files(self, path: Optional[str] = '/') -> Dict[str, Any]:
         """
         List all entries in a directory.  If path is not provided, lists all
-        files at '/'.  Relative paths are converted to absolute paths - for example,
-        if list_files("path/to/file") is called, it is converted to "/path/to/file".
+        files at '/'.
 
         Parameters:
             path: str - Relative path to the directory.
@@ -304,41 +279,36 @@ class FileSystem:
 #   • The line‑content part (everything after the last delimiter) 
 #     is captured unchanged. 
 # ---------------------------------------------------------------------- 
-EGREP_LINE_RE = re.compile(r''' 
-    ^                                   # start of line 
-    (?P<filename>.+?)                   # filename – lazy so it stops at the first delimiter 
-    (?:                                 # non‑capturing group for the two possible delimiters 
-        ([-:])(?P<lineno>\d+)\2         #   a) context line  → “-23-” 
-    ) 
-    (?P<content>.*)                     # the rest of the line (the source code) 
-    $                                   # end of line 
-''', re.VERBOSE) 
+EGREP_LINE_RE = re.compile(r'''
+    ^                                   # start of line
+    (?P<filename>.+?)                   # filename – lazy so it stops at the first delimiter
+    (?:                                 # non‑capturing group for the two possible delimiters
+        ([-:])(?P<lineno>\d+)\2         #   a) context line  → “-23-”
+    )
+    (?P<content>.*)                     # the rest of the line (the source code)
+    $                                   # end of line
+''', re.VERBOSE)
 
-def parse_egrep_line(line: str) -> Dict:  
-    """ 
-    Parse a single egrep output line. 
+def parse_egrep_line(line: str) -> Dict:
+    """Parse a single egrep output line.
 
     Returns 
     ------- 
     dict | None 
         ``{'filename': ..., 'lineno': int, 'is_match': bool, 'content': ...}`` 
         or ``None`` if the line does not match the expected format. 
-    """ 
-    m = EGREP_LINE_RE.match(line) 
-    if not m: 
-        return None 
+    """
+    m = EGREP_LINE_RE.match(line)
+    if not m:
+        return None
 
-    # ``lineno`` is always present – convert it to int 
-    lineno = int(m.group('lineno')) 
+    lineno = int(m.group('lineno'))
 
-    # If the delimiter that was used is a colon, this line is the *match*. 
-    # The context form uses the dash‑dash pattern. 
-    is_match = ':' in line.split(str(lineno))[0]   # simple but reliable 
-
-    return { 
+    # ':' is a a match delimieter, '-' is a context delimiter.
+    is_match = ':' in line.split(str(lineno))[0]
+    return {
         'filename': m.group('filename'), 
-        'lineno'  : lineno, 
-        'context': not is_match, 
-        'content' : m.group('content') 
-    } 
-
+        'lineno': lineno, 
+        'context': not is_match,
+        'content': m.group('content')
+    }

@@ -37,6 +37,7 @@ class RawTextFormatter(MessageFormatter):
 
 class MarkdownFormatter(MessageFormatter):
     """Formats messages as markdown using the rich library."""
+    CONTENT_SEPARATOR = "---\nCONTENT\n---\n"
 
     def __init__(self, in_block, out_block):
         """Formats and prints the message as markdown."""
@@ -51,7 +52,7 @@ class MarkdownFormatter(MessageFormatter):
 
     def print_out_block(self, message: str):
         from rich.markdown import Markdown
-        markdown = Markdown(message)
+        markdown = Markdown(self.CONTENT_SEPARATOR + message)
         self.out_block_console.print(markdown)
 
 def get_formatter(in_block_path, format_markdown):

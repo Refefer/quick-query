@@ -1,10 +1,8 @@
-# coding.py
 """
 coding.py
 ~~~~~~~~~
-Utility class for performing simple code‑related operations using only the
-Python standard library.  The implementation mirrors the style of `fs.py`,
-including type hints, docstrings, and basic error handling.
+Utility class for performing simple code‑related operations using only the Python standard library.
+The implementation mirrors the style of `fs.py`, including type hints, docstrings, and basic error handling.
 """
 
 from __future__ import annotations
@@ -13,6 +11,9 @@ import pathlib
 import subprocess
 import shlex
 from typing import Dict, Any, List
+
+# Import the shared base class providing root handling.
+from .base import RootedBase
 
 
 class PatchError(RuntimeError):
@@ -35,38 +36,23 @@ class PatchError(RuntimeError):
         self.returncode = returncode
 
 
-class Coding:
-    """
-    A small helper class that can generate a line‑by‑line diff between two
-    files and apply such a diff back to a file.  The diff format used is the
-    ``difflib.ndiff`` output, which can be directly consumed by
-    ``difflib.restore`` — keeping the whole process pure‑Python and portable.
+class Coding(RootedBase):
+    """Utility class for generating diffs and applying patches within a sandbox root.
+    Inherits path‑resolution logic from :class:`RootedBase`.
     """
 
     def __init__(self, root: str = ".") -> None:
-        """
+        """Initialize the Coding helper with a sandbox root directory.
         Parameters
         ----------
         root: str
-            Base directory for all operations.  Paths supplied to the public
-            methods are interpreted relative to this directory.
+            Base directory for all operations.  Paths supplied to the public methods are interpreted relative to this directory.
         """
-        self.root = pathlib.Path(root).resolve()
+        super().__init__(root)
 
     # --------------------------------------------------------------------- #
-    # Internal helpers
+    # Internal helpers (no need for a custom _resolve_path – inherited from RootedBase)
     # --------------------------------------------------------------------- #
-    def _resolve_path(self, path: str) -> pathlib.Path:
-        """
-        Resolve *path* relative to ``self.root`` and ensure it stays inside the
-        root directory.
-        """
-        resolved = (self.root / path.lstrip("/")).resolve()
-        if not str(resolved).startswith(str(self.root)):
-            raise FileNotFoundError(f"Path {path!r} is outside the allowed root")
-
-        return resolved
-
     def _run_subprocess(self, cmd: List[str], input_text: str | None = None) -> str:
         """Run *cmd* with ``cwd=self.root``.
 
@@ -107,12 +93,10 @@ class Coding:
     # --------------------------------------------------------------------- #
     # Public API
     # --------------------------------------------------------------------- #
-    def diff_files(self, file1: str, file2: str) -> str:
+    def diff_files(self, file1: str, file2: str) -> Dict[str, Any]:
         """
-        Produce an ``normal diff`` representation of the differences between
-        *file1* and *file2*.  This is _not_ a unified diff format: for example, 
-        if the only difference between two files was the first line,
-        a patch might look like: 
+        Produce an ``normal diff`` representation of the differences between *file1* and *file2*.
+        This is _not_ a unified diff format. Make sure to not use a unified-diff format. For example:
 
         ```
         1c1
@@ -121,8 +105,6 @@ class Coding:
         > x = 1 * 2
         ```
 
-        Make sure to not use a unified-diff format. 
-
         The most effective way to patch a file is as follows:
         1. create_temp_file: creates a temp file with content.
         2. diff_files: Creates a diff for user approval.
@@ -130,19 +112,27 @@ class Coding:
         or
         3. apply_patch: applies the patch to the given file.
 
+
+        When creating a new file, use `write_file` instead.
+
         Parameters:
             file1: str - Path to the file on disk to diff against.
             file2: str - Path to the file on disk to diff.
 
-        Returns:
-            str - {"success": bool, "diff": (if true) The diff as a single string, "error": str(err)}  
-                  This string can be passed directly to :meth:`apply_patch`.
+
+        Parameters
+        ----------
+        file1: str - Path to the file on disk to diff against.
+        file2: str - Path to the file on disk to diff.
+
+        Returns
+        -------
+        dict
+            ``{"success": True, "diff": <string>}`` on success or ``{"success": False, "error": <msg>}`` on failure.
         """
         try:
-            # Resolve to absolute paths for the external diff command.
-            path1 = str(self._resolve_path(file1))
-            path2 = str(self._resolve_path(file2))
-            # ``diff -u`` produces a unified diff.
+            path1 = str(self.resolve_path(file1))
+            path2 = str(self.resolve_path(file2))
             diff_output = self._run_subprocess(["diff", path1, path2])
             return {"success": True, "diff": diff_output}
 
@@ -166,25 +156,24 @@ class Coding:
         Patches do _not_ include filenames.  Make sure to include a trailing newline.  Even if a 'apply_patch'
         completes successfully, confirm the contents of the file match expectations.
 
-        Parameters:
-            filename: str - Path to the file getting patched.
-            patch: str - The diff string produced by :meth: `create_diff` or `diff_files`.
+        Parameters
+        ----------
+        filename: str - Path to the file getting patched.
+        patch: str - The diff string produced by :meth:`diff_files`.
 
-        Returns:
-            dict - {"success": True}`` on success or ``{"success": False, "error": <error message>} on failure.
+        Returns
+        -------
+        dict
+            ``{"success": True}`` on success or ``{"success": False, "error": <msg>}`` on failure.
         """
         try:
-            filename = self._resolve_path(filename)
-            # ``patch`` reads the patch from stdin; ``-p1`` means strip leading slash.
-            # ``-d <root>`` reinforces the directory restriction.
-            self._run_subprocess(["patch", filename], input_text=patch)
+            target = self.resolve_path(filename)
+            # The external ``patch`` command reads the diff from stdin.
+            self._run_subprocess(["patch", str(target)], input_text=patch)
             return {"success": True}
 
         except PatchError as exc:
-            print(exc)
             return {"success": False, "error": exc.stderr or exc.stdout}
 
         except Exception as exc:
-            print(exc)
             return {"success": False, "error": str(exc)}
-
