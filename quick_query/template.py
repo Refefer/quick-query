@@ -4,6 +4,9 @@ import json
 import concurrent.futures
 from contextlib import contextmanager
 from functools import lru_cache
+from functools import lru_cache
+from .openapi import TagTypes
+from quick_query.formatter import process_streaming_response, NullFormatter
 
 import jinja2 
 
@@ -28,7 +31,7 @@ class JsonlStreamer(VariableStreamer):
         self.fname = fname
 
     def stream(self):
-        if args.fname == '-':
+        if self.fname == '-':
             for line in sys.stdin:
                 yield json.loads(line)
         else:
@@ -64,7 +67,6 @@ class TemplaterFromField(TemplateExtractor):
 
 def setup_messages(initial_state):
     content = initial_state.system_prompt if initial_state.system_prompt else "You are a helpful AI assistant."
-    
     return [{"role": "system", "content": content}]
 
 class Templater:
@@ -87,10 +89,38 @@ class Templater:
     def evaluate_prompt(self, server, messages, mp, stream_processor, prompt):
         variables, prompt = prompt
         messages = messages + [mp.process_user_prompt(prompt)]
-        chunk_stream  = server.send_chat_completion(messages, stream=True)
-        response_stream = stream_processor.process_stream(chunk_stream)
-        response = ''.join(r for is_cot, r in response_stream if not is_cot)
-        return variables, response
+        while True:
+            chunk_stream = server.send_chat_completion(messages)
+            cot_stream = stream_processor.process_stream(chunk_stream)
+            response = dict(
+                process_streaming_response(
+                    cot_stream,
+                    NullFormatter(),
+                    False
+                )
+            )
+
+            if TagTypes.Tool_calls in response:
+                tc = response[TagTypes.Tool_calls]
+                messages.append(
+                    mp.process_tool_request(tc)
+                )
+                tool_resp = server.process_tool_call(tc)
+                messages.append(
+                    mp.process_tool_response(tool_resp)
+                )
+            else:
+                return variables, response[TagTypes.Content]
+
+    #def evaluate_prompt(self, server, messages, mp, stream_processor, prompt):
+    #    variables, prompt = prompt
+    #    messages = messages + [mp.process_user_prompt(prompt)]
+    #    chunk_stream  = server.send_chat_completion(messages)
+    #    response_stream = stream_processor.process_stream(chunk_stream)
+    #    response_stream = list(response_stream)
+    #    response = ''.join(r for tt, r in response_stream if tt == TagTypes.Content)
+
+    #    return variables, response
 
     def run(self, initial_state, server, stream_processor, message_processor, template_renderer, variable_streamer):
         responses = self.stream_results(initial_state, server, stream_processor, message_processor, template_renderer, variable_streamer)
@@ -123,8 +153,6 @@ class Templater:
 
                     try:
                         futures.append(execute(next(prompt_stream)))
-                        new_prompt = next(prompts)
-                        futures.append(executor.submit(evaluate_prompt, new_prompt, model, api_key, base_url, **kwargs))
                     except StopIteration:
                         pass
 

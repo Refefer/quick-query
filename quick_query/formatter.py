@@ -55,6 +55,17 @@ class MarkdownFormatter(MessageFormatter):
         markdown = Markdown(self.CONTENT_SEPARATOR + message)
         self.out_block_console.print(markdown)
 
+class NullFormatter(MessageFormatter):
+    """Does nothing"""
+    def __init__(self):
+        pass
+
+    def print_in_block(self, message: str):
+        pass
+
+    def print_out_block(self, message: str):
+        pass
+
 def get_formatter(in_block_path, format_markdown):
     if format_markdown:
         return MarkdownFormatter(in_block_path, sys.stdout)

@@ -44,7 +44,7 @@ class FileSystem(RootedBase):
         self._temp_files.clear()
     
     def create_temp_file(self, dirname: str, content: str | None) -> Dict[str, Any]:
-        """Create an empty temporary file with a random name inside *dir*.  This
+        """Create an empty temporary file with a random name inside *dirbame*.  This
         method is useful for creating a file to write a code change to and then diffing
         it with the original.
 
@@ -53,7 +53,7 @@ class FileSystem(RootedBase):
 
         Parameters:
             dirname: str - Relative directory (under the managed root) where the temporary file should be placed.
-            content: optional str - If provided, writes the content to the new file.
+            content: optional str - If provided, writes the content to the new file.  Ensure it's a valid, escaped string.
 
         Returns
         -------
@@ -91,6 +91,39 @@ class FileSystem(RootedBase):
             with open(self.resolve_path(path)) as f:
                 return {"success": True, "content": f.read()}
 
+        except Exception as e:
+            return {"success": False, "error": e.__class__.__name__}
+    
+    def head(self, path: str, k: int = 10) -> Dict[str, Any]:
+        """
+        Return the first *k* lines of a text file as a single string,
+        mimicking the POSIX ``head`` command.
+
+        Parameters
+        ----------
+        path : str - Relative path of the file to read.
+        k : optional int - Number of lines to return; defaults to 10. If ``k`` <= 0 an empty
+            string is returned.
+
+        Returns
+        -------
+        dict
+            {"success": True, "content": <str>} on success,
+            {"success": False, "error": "<ExceptionName>"} on failure.
+        """
+        try:
+            if k <= 0:
+                return {"success": True, "content": ""}
+
+            with open(self.resolve_path(path), "r") as f:
+                lines = []
+                for i, line in enumerate(f):
+                    if i >= k:
+                        break
+                    lines.append(line)
+                content = "".join(lines)
+
+            return {"success": True, "content": content}
         except Exception as e:
             return {"success": False, "error": e.__class__.__name__}
 
@@ -279,7 +312,7 @@ class FileSystem(RootedBase):
 #   • The line‑content part (everything after the last delimiter) 
 #     is captured unchanged. 
 # ---------------------------------------------------------------------- 
-EGREP_LINE_RE = re.compile(r'''
+EGREP_LINE_RE = re.compile(r'''\
     ^                                   # start of line
     (?P<filename>.+?)                   # filename – lazy so it stops at the first delimiter
     (?:                                 # non‑capturing group for the two possible delimiters
@@ -288,15 +321,14 @@ EGREP_LINE_RE = re.compile(r'''
     (?P<content>.*)                     # the rest of the line (the source code)
     $                                   # end of line
 ''', re.VERBOSE)
-
 def parse_egrep_line(line: str) -> Dict:
     """Parse a single egrep output line.
 
     Returns 
-    ------- 
+    -------
     dict | None 
-        ``{'filename': ..., 'lineno': int, 'is_match': bool, 'content': ...}`` 
-        or ``None`` if the line does not match the expected format. 
+        {'filename': ..., 'lineno': int, 'is_match': bool, 'content': ...} 
+        or None if the line does not match the expected format. 
     """
     m = EGREP_LINE_RE.match(line)
     if not m:
