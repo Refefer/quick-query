@@ -18,11 +18,17 @@ class FileSystem(RootedBase):
     """Utility class for safe file operations within a designated root directory."""
 
     def __init__(self, root: str) -> None:
-        """
-        Initialize the FileSystem with a root directory.
+        """Initialize the FileSystem with a root directory.
 
-        Parameters:
-            root: str - Path to the root directory.
+        Parameters
+        ----------
+        root : str
+            Path to the root directory.
+
+        Returns
+        -------
+        None
+            No return value.
         """
         super().__init__(root)
         # Keep track of temporary files created via ``create_temp_file`` so we can
@@ -33,9 +39,14 @@ class FileSystem(RootedBase):
     def _cleanup_temp_files(self) -> None:
         """Remove any temporary files that were created during this session.
 
-        This method is registered with ``atexit`` and will be called when the
-        Python process terminates.  Errors during cleanup are silenced to avoid
-        interfering with normal shutdown procedures.
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+            No return value.
         """
         for temp_path in self._temp_files:
             if temp_path.exists():
@@ -84,7 +95,16 @@ class FileSystem(RootedBase):
     def read_file(self, path: str) -> str:
         """Read the contents of a file.
 
-        Returns the file content on success or an error string on failure.
+        Parameters
+        ----------
+        path : str
+            Relative path (under the managed root) of the file to read.
+
+        Returns
+        -------
+        str
+            The file content on success,
+            or an error string ``"Error using `<tool>`: <exception>`` on failure.
         """
         try:
             with open(self.resolve_path(path)) as f:
@@ -96,7 +116,19 @@ class FileSystem(RootedBase):
     def head(self, path: str, k: int = 10) -> str:
         """Return the first *k* lines of a text file as a single string.
 
-        Returns an empty string if ``k`` <= 0. On error returns an error string.
+        Parameters
+        ----------
+        path : str
+            Relative path (under the managed root) of the file to read.
+        k : int, optional
+            Number of lines to return. Defaults to ``10``. If ``k <= 0``, an empty string is returned.
+
+        Returns
+        -------
+        str
+            The concatenated first *k* lines,
+            or an empty string if ``k <= 0``,
+            or an error string ``"Error using `<tool>`: <exception>`` on failure.
         """
         try:
             if k <= 0:
@@ -115,7 +147,18 @@ class FileSystem(RootedBase):
     def write_file(self, path: str, contents: str) -> bool:
         """Write *contents* to a file.
 
-        Returns ``True`` on success or an error string on failure.
+        Parameters
+        ----------
+        path : str
+            Relative path (under the managed root) of the file to write.
+        contents : str
+            The text content to write into the file.
+
+        Returns
+        -------
+        bool
+            ``True`` on success,
+            or an error string ``"Error using `<tool>`: <exception>`` on failure.
         """
         try:
             with open(self.resolve_path(path), "w") as out:
@@ -128,8 +171,16 @@ class FileSystem(RootedBase):
     def list_files(self, path: Optional[str] = '/') -> List[Dict[str, Any]]:
         """List all entries in a directory.
 
-        Returns a list of dictionaries describing each entry on success,
-        or an error string on failure.
+        Parameters
+        ----------
+        path : Optional[str], default='/'
+            Relative directory (under the managed root) to list. ``'/'`` refers to the root itself.
+
+        Returns
+        -------
+        List[Dict[str, Any]]
+            A list of dictionaries describing each entry on success,
+            or an error string ``"Error using `<tool>`: <exception>`` on failure.
         """
         try:
             files: List[Dict[str, Any]] = []
@@ -150,7 +201,16 @@ class FileSystem(RootedBase):
     def delete_file(self, path: str) -> bool:
         """Delete a file.
 
-        Returns ``True`` on success or an error string on failure.
+        Parameters
+        ----------
+        path : str
+            Relative path (under the managed root) of the file to delete.
+
+        Returns
+        -------
+        bool
+            ``True`` on success,
+            or an error string ``"Error using `<tool>`: <exception>`` on failure.
         """
         try:
             p = self.resolve_path(path)
@@ -162,8 +222,16 @@ class FileSystem(RootedBase):
     def create_directory(self, path: str) -> bool:
         """Create a new directory within the managed root.
 
-        Returns ``True`` on success (including when the directory already exists)
-        or an error string on failure.
+        Parameters
+        ----------
+        path : str
+            Relative directory (under the managed root) to create.
+
+        Returns
+        -------
+        bool
+            ``True`` on success (including when the directory already exists),
+            or an error string ``"Error using `<tool>`: <exception>`` on failure.
         """
         try:
             dir_path = self.resolve_path(path)
@@ -176,7 +244,18 @@ class FileSystem(RootedBase):
     def move_file(self, src: str, dest: str) -> bool:
         """Move a file from ``src`` to ``dest``.
 
-        Returns ``True`` on success or an error string on failure.
+        Parameters
+        ----------
+        src : str
+            Relative path (under the managed root) of the source file.
+        dest : str
+            Relative path (under the managed root) where the file should be moved.
+
+        Returns
+        -------
+        bool
+            ``True`` on success,
+            or an error string ``"Error using `<tool>`: <exception>`` on failure.
         """
         try:
             src_path = self.resolve_path(src)
@@ -200,8 +279,20 @@ class FileSystem(RootedBase):
     def search_by_regex(self, path: str, regex: str, context: int) -> str:
         """Search files under ``path`` for a regular expression using egrep.
 
-        Returns the formatted egrep output (with paths relative to the sandbox root)
-        on success or an error string on failure.
+        Parameters
+        ----------
+        path : str
+            Relative directory (under the managed root) to start the recursive search.
+        regex : str
+            Regular expression pattern to search for.
+        context : int
+            Number of context lines to include around each match.
+
+        Returns
+        -------
+        str
+            The formatted egrep output (with paths relative to the sandbox root) on success,
+            or an error string ``"Error using `<tool>`: <exception>`` on failure.
         """
         try:
             # Resolve the base directory; this also validates that it is within the root.
