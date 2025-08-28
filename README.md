@@ -133,7 +133,7 @@ qq chat \
 ```
 Enter a REPL where each line you type is sent to the model and the streamed answer is displayed. Use `Ctrl‑D` (EOF) to exit.
 
-#### Chat‑specific flags
+#### Chat-specific flags
 > Chat does not introduce any flags that are not already available in the other modes; it relies entirely on the common set of options (system prompt, profile selection, formatting, etc.).
 
 ---
@@ -178,6 +178,36 @@ qq list --profiles         # shows all profile sections in conf.toml
 
 ---
 
+## Built‑in Tools
+
+quick_query ships with several built‑in tools that can be loaded via the `--tools` command‑line option or referenced in configuration files. All tools live under the `quick_query.tools` package and operate within a sandboxed root directory to avoid accidental modification of unrelated files.
+
+### FileSystem
+*Implemented in `quick_query/tools/fs.py`.*
+
+The **FileSystem** tool provides safe file system access relative to a configured root path. It resolves paths securely, preventing directory‑traversal attacks, and offers basic operations such as reading, writing, listing, and deleting files within that sandbox.
+
+Typical usage in a TOML configuration:
+
+```toml
+[tool.filesystem]
+root = "/path/to/project"
+```
+
+### Coding
+*Implemented in `quick_query/tools/coding.py`.*
+
+The **Coding** tool supplies utilities for generating diffs between two files and applying patches using external `diff` and `patch` commands. It inherits from `RootedBase`, so all file arguments are interpreted relative to the tool’s root.
+
+Key methods:
+
+- `diff_files(file1, file2)` – Returns a normal (non‑unified) diff string describing changes between two files.
+- `apply_patch(filename, patch)` – Applies a previously generated diff to a target file.
+
+Both methods return a dictionary with a `"success"` flag and either the result (`"diff"`) or an error message (`"error"`).
+
+If you have additional built‑in tools (e.g., a shell executor or Git helper), they can be documented here in the same format. New tools are typically added by subclassing `RootedBase` and exposing public methods that operate on paths resolved within the sandbox.
+
 ## Development / Release
 
 The project now builds with **PEP 517** via a `pyproject.toml`.  To create a source distribution and a wheel locally, run:
@@ -221,7 +251,7 @@ Now you can publish a new version with, for example:
 
 quick‑query is dual‑licensed under the **MIT** and **Apache 2.0** licenses.  See the `LICENSE` files in the repository for full terms.
 
----
+--- 
 
 ## Contributors
 
