@@ -43,9 +43,10 @@ class Coding(RootedBase):
 
     def __init__(self, root: str = ".") -> None:
         """Initialize the Coding helper with a sandbox root directory.
+
         Parameters
         ----------
-        root: str
+        root : str
             Base directory for all operations.  Paths supplied to the public methods are interpreted relative to this directory.
         """
         super().__init__(root)
@@ -58,9 +59,9 @@ class Coding(RootedBase):
 
         Parameters
         ----------
-        cmd: List[str]
+        cmd : List[str]
             Command and arguments to execute.
-        input_text: str | None, optional
+        input_text : str | None, optional
             Text to send to the process's stdin (used for ``patch``).
 
         Returns
@@ -93,87 +94,32 @@ class Coding(RootedBase):
     # --------------------------------------------------------------------- #
     # Public API
     # --------------------------------------------------------------------- #
-    def diff_files(self, file1: str, file2: str) -> Dict[str, Any]:
-        """
-        Produce an ``normal diff`` representation of the differences between *file1* and *file2*.
-        This is _not_ a unified diff format. Make sure to not use a unified-diff format. For example:
+    def diff_files(self, file1: str, file2: str) -> Any:
+        """Produce a ``normal diff`` representation of the differences between *file1* and *file2*.
 
-        ```
-        1c1
-        < x = 1 + 2
-        ---
-        > x = 1 * 2
-        ```
-
-        The most effective way to patch a file is as follows:
-        1. create_temp_file: creates a temp file with content.
-        2. diff_files: Creates a diff for user approval.
-        3. move_file: overwrite the original file with the temp file.
-        or
-        3. apply_patch: applies the patch to the given file.
-
-
-        When creating a new file, use `write_file` instead.
-
-        Parameters:
-            file1: str - Path to the file on disk to diff against.
-            file2: str - Path to the file on disk to diff.
-
-
-        Parameters
-        ----------
-        file1: str - Path to the file on disk to diff against.
-        file2: str - Path to the file on disk to diff.
-
-        Returns
-        -------
-        dict
-            ``{"success": True, "diff": <string>}`` on success or ``{"success": False, "error": <msg>}`` on failure.
+        Returns the diff string on success or an error string on failure.
         """
         try:
             path1 = str(self.resolve_path(file1))
             path2 = str(self.resolve_path(file2))
             diff_output = self._run_subprocess(["diff", path1, path2])
-            return {"success": True, "diff": diff_output}
-
+            return diff_output
         except PatchError as exc:
-            return {"success": False, "error": exc.stderr or exc.stdout}
-
+            return f"Error using `{self.__class__.__name__}`: {exc.stderr or exc.stdout}"
         except Exception as exc:
-            return {"success": False, "error": str(exc)}
+            return f"Error using `{self.__class__.__name__}`: {exc}"
 
-    def apply_patch(self, filename: str, patch: str) -> Dict[str, Any]:
-        """
-        Apply a ``normal diff`` patch to the given file.  A patch is created from using ``diff_files``.
-        For example, if we have a file "foo.py" with the following patch: ```
-        1c1
-        < x = 1 + 2
-        ---
-        > x = 1 * 2
-        ```
-        would patch the first line of code from an addition to a multiply.
+    def apply_patch(self, filename: str, patch: str) -> Any:
+        """Apply a ``normal diff`` patch to the given file.
 
-        Patches do _not_ include filenames.  Make sure to include a trailing newline.  Even if a 'apply_patch'
-        completes successfully, confirm the contents of the file match expectations.
-
-        Parameters
-        ----------
-        filename: str - Path to the file getting patched.
-        patch: str - The diff string produced by :meth:`diff_files`.
-
-        Returns
-        -------
-        dict
-            ``{"success": True}`` on success or ``{"success": False, "error": <msg>}`` on failure.
+        Returns ``True`` on success or an error string on failure.
         """
         try:
             target = self.resolve_path(filename)
             # The external ``patch`` command reads the diff from stdin.
             self._run_subprocess(["patch", str(target)], input_text=patch)
-            return {"success": True}
-
+            return True
         except PatchError as exc:
-            return {"success": False, "error": exc.stderr or exc.stdout}
-
+            return f"Error using `{self.__class__.__name__}`: {exc.stderr or exc.stdout}"
         except Exception as exc:
-            return {"success": False, "error": str(exc)}
+            return f"Error using `{self.__class__.__name__}`: {exc}"
