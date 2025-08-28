@@ -1,5 +1,5 @@
 import sqlite3
-from typing import List
+from typing import List, Any
 
 class Memory:
 
