@@ -59,10 +59,8 @@ class FileSystem(RootedBase):
 
         Parameters
         ----------
-        dirname : str
-            Relative directory (under the managed root) where the temporary file should be placed.
-        content : Optional[str]
-            If provided, writes the content to the new file.
+        dirname: str - Relative directory (under the managed root) where the temporary file should be placed.
+        content: Optional[str] - If provided, writes the content to the new file.
 
         Returns
         -------
@@ -97,8 +95,7 @@ class FileSystem(RootedBase):
 
         Parameters
         ----------
-        path : str
-            Relative path (under the managed root) of the file to read.
+        path: str - Relative path (under the managed root) of the file to read.
 
         Returns
         -------
@@ -118,10 +115,8 @@ class FileSystem(RootedBase):
 
         Parameters
         ----------
-        path : str
-            Relative path (under the managed root) of the file to read.
-        k : int, optional
-            Number of lines to return. Defaults to ``10``. If ``k <= 0``, an empty string is returned.
+        path: str - Relative path (under the managed root) of the file to read.
+        k: int, optional - Number of lines to return. Defaults to ``10``. If ``k <= 0``, an empty string is returned.
 
         Returns
         -------
@@ -149,10 +144,8 @@ class FileSystem(RootedBase):
 
         Parameters
         ----------
-        path : str
-            Relative path (under the managed root) of the file to write.
-        contents : str
-            The text content to write into the file.
+        path : str - Relative path (under the managed root) of the file to write.
+        contents : str - The text content to write into the file.
 
         Returns
         -------
@@ -173,8 +166,7 @@ class FileSystem(RootedBase):
 
         Parameters
         ----------
-        path : Optional[str], default='/'
-            Relative directory (under the managed root) to list. ``'/'`` refers to the root itself.
+        path : Optional[str], default='/' - Relative directory (under the managed root) to list. ``'/'`` refers to the root itself.
 
         Returns
         -------
@@ -203,8 +195,7 @@ class FileSystem(RootedBase):
 
         Parameters
         ----------
-        path : str
-            Relative path (under the managed root) of the file to delete.
+        path : str - Relative path (under the managed root) of the file to delete.
 
         Returns
         -------
@@ -224,8 +215,7 @@ class FileSystem(RootedBase):
 
         Parameters
         ----------
-        path : str
-            Relative directory (under the managed root) to create.
+        path : str - Relative directory (under the managed root) to create.
 
         Returns
         -------
@@ -246,10 +236,8 @@ class FileSystem(RootedBase):
 
         Parameters
         ----------
-        src : str
-            Relative path (under the managed root) of the source file.
-        dest : str
-            Relative path (under the managed root) where the file should be moved.
+        src : str - Relative path (under the managed root) of the source file.
+        dest : str - Relative path (under the managed root) where the file should be moved.
 
         Returns
         -------
@@ -281,12 +269,9 @@ class FileSystem(RootedBase):
 
         Parameters
         ----------
-        path : str
-            Relative directory (under the managed root) to start the recursive search.
-        regex : str
-            Regular expression pattern to search for.
-        context : int
-            Number of context lines to include around each match.
+        path : str - Relative directory (under the managed root) to start the recursive search.
+        regex : str - Regular expression pattern to search for.
+        context : int - Number of context lines to include around each match.
 
         Returns
         -------
