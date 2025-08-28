@@ -109,18 +109,12 @@ class Templater:
                 messages.append(
                     mp.process_tool_response(tool_resp)
                 )
-            else:
+
+            elif TagTypes.Content in response:
                 return variables, response[TagTypes.Content]
 
-    #def evaluate_prompt(self, server, messages, mp, stream_processor, prompt):
-    #    variables, prompt = prompt
-    #    messages = messages + [mp.process_user_prompt(prompt)]
-    #    chunk_stream  = server.send_chat_completion(messages)
-    #    response_stream = stream_processor.process_stream(chunk_stream)
-    #    response_stream = list(response_stream)
-    #    response = ''.join(r for tt, r in response_stream if tt == TagTypes.Content)
-
-    #    return variables, response
+            else:
+                return variables, None
 
     def run(self, initial_state, server, stream_processor, message_processor, template_renderer, variable_streamer):
         responses = self.stream_results(initial_state, server, stream_processor, message_processor, template_renderer, variable_streamer)
