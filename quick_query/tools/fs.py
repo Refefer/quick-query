@@ -77,6 +77,7 @@ class FileSystem(RootedBase):
 
             rel_path = str(tmp_path.resolve())[self.root_len:]
             return rel_path
+
         except Exception as e:
             return f"Error using `{self.__class__.__name__}`: {e}"
 
@@ -88,6 +89,7 @@ class FileSystem(RootedBase):
         try:
             with open(self.resolve_path(path)) as f:
                 return f.read()
+
         except Exception as e:
             return f"Error using `{self.__class__.__name__}`: {e}"
     
@@ -119,6 +121,7 @@ class FileSystem(RootedBase):
             with open(self.resolve_path(path), "w") as out:
                 out.write(contents)
             return True
+
         except Exception as e:
             return f"Error using `{self.__class__.__name__}`: {e}"
 
@@ -140,6 +143,7 @@ class FileSystem(RootedBase):
                     }
                 )
             return files
+
         except Exception as e:
             return f"Error using `{self.__class__.__name__}`: {e}"
 
