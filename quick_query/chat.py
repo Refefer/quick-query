@@ -91,11 +91,7 @@ class Redo(Command):
     ) -> bool:
         """Redo (repeat) the most recent user input, removing any assistant or tool messages that followed."""
         # Find the index of the most recent user message.
-        last_user_idx = None
-        for i in range(len(chat.messages) - 1, -1, -1):
-            if chat.messages[i].get("role") == "user":
-                last_user_idx = i
-                break
+        last_user_idx = chat.find_last_user_input()
 
         # If no user message is found (or only system prompt exists), do nothing.
         if last_user_idx is None or last_user_idx == 0:
@@ -123,11 +119,7 @@ class Undo(Command):
     ) -> bool:
         """Undo the last user‑assistant exchange, including any tool calls that were part of it."""
         # Find the index of the most recent user message.
-        last_user_idx = None
-        for i in range(len(chat.messages) - 1, -1, -1):
-            if chat.messages[i].get("role") == "user":
-                last_user_idx = i
-                break
+        last_user_idx = chat.find_last_user_input()
 
         # If no user message is found (or only system prompt exists), do nothing.
         if last_user_idx is None or last_user_idx == 0:
@@ -362,6 +354,17 @@ class Chat:
             parts.append(self.initial_state.stdin_prompt)
 
         return "\n".join(parts) if parts else None
+
+    def find_last_user_input(self) -> Optional[int]:
+        """Return the index of the most recent user message in ``self.messages``.
+
+        Returns:
+            int: Index of last user message, or None if no such message exists.
+        """
+        for i in range(len(self.messages) - 1, -1, -1):
+            if self.messages[i].get("role") == "user":
+                return i
+        return None
 
     def add_command(self, command: Command) -> None:
         """Register a command instance with the chat."""
