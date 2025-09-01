@@ -44,6 +44,7 @@ class Reset(Command):
         chat.messages[:] = chat.messages[: chat.orig_message_len]
         return True
 
+
 class Save(Command):
     cmd = "save"
 
@@ -88,13 +89,27 @@ class Redo(Command):
         user_input: str,
         buffer: List[str],
     ) -> bool:
-        """Redo the most recent user input that was undone."""
-        if len(chat.messages) > 2:
-            buffer.append(chat.messages[-2]["content"])
-            chat.messages[:] = chat.messages[:-2]
-            return False
+        """Redo (repeat) the most recent user input, removing any assistant or tool messages that followed."""
+        # Find the index of the most recent user message.
+        last_user_idx = None
+        for i in range(len(chat.messages) - 1, -1, -1):
+            if chat.messages[i].get("role") == "user":
+                last_user_idx = i
+                break
 
-        return True
+        # If no user message is found (or only system prompt exists), do nothing.
+        if last_user_idx is None or last_user_idx == 0:
+            return True
+
+        # Retrieve the content of that user message before we truncate.
+        user_content = chat.messages[last_user_idx]["content"]
+        buffer.append(user_content)
+
+        # Truncate everything from the found user message onward (including any assistant/tool messages).
+        chat.messages[:] = chat.messages[:last_user_idx]
+
+        # Returning False signals get_user_input to break out of its loop and use `buffer` as the new input.
+        return False
 
 
 class Undo(Command):
@@ -106,9 +121,20 @@ class Undo(Command):
         user_input: str,
         buffer: List[str],
     ) -> bool:
-        """Undo the last user‑assistant exchange."""
-        if len(chat.messages) > 2:
-            chat.messages[:] = chat.messages[:-2]
+        """Undo the last user‑assistant exchange, including any tool calls that were part of it."""
+        # Find the index of the most recent user message.
+        last_user_idx = None
+        for i in range(len(chat.messages) - 1, -1, -1):
+            if chat.messages[i].get("role") == "user":
+                last_user_idx = i
+                break
+
+        # If no user message is found (or only system prompt exists), do nothing.
+        if last_user_idx is None or last_user_idx == 0:
+            return True
+
+        # Remove the user message and everything that followed it (assistant replies, tool calls, etc.).
+        chat.messages[:] = chat.messages[:last_user_idx]
 
         return True
 
@@ -203,6 +229,7 @@ class ToolsToggle(Command):
             status = "✅ enabled" if enabled else "❌ disabled"
             print(f"  {name:<20} {status}")
 
+
 class Compact(Command):
     """Summarise the current conversation and reset it.
 
@@ -253,6 +280,7 @@ class Compact(Command):
         chat.orig_message_len = len(chat.messages)
         print("Conversation compacted and reset.")
         return True
+
 
 class Chat:
     """Encapsulates a conversational session with command handling."""
