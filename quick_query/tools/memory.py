@@ -38,7 +38,8 @@ class Memory:
     def list_memories(self):
         """Return a list of all memory names.
 
-        Returns the list on success or an error string on failure.
+        Returns:
+            List of memory names
         """
         try:
             cursor = self.conn.cursor()
@@ -55,7 +56,12 @@ class Memory:
     ) -> Any:
         """Add a new memory or overwrite an existing one.
 
-        Returns ``True`` on success or an error string on failure.
+        Parameters:
+            name : str - Name of the memory to store
+            content: str - Content to store.
+
+        Returns:
+            ``True`` on success or an error string on failure.
         """
         try:
             with self.conn:
@@ -71,7 +77,11 @@ class Memory:
     def read_memory(self, name: str) -> Any:
         """Read the content of a memory.
 
-        Returns the stored string on success (or an empty string if not found) or an error string on failure.
+        Parameters:
+            name: str - Name of the memory to read.
+
+        Returns:
+            The stored string on success (or an empty string if not found) or an error string on failure.
         """
         try:
             cursor = self.conn.cursor()
@@ -85,7 +95,11 @@ class Memory:
     def delete_memory(self, name: str) -> Any:
         """Delete a memory.
 
-        Returns ``True`` on success or an error string on failure.
+        Parameters:
+            name: str - Name of the memory to delete.
+
+        Returns:
+            bool for success
         """
         try:
             with self.conn:

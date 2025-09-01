@@ -40,7 +40,7 @@ def _parse_param_docs(doc):
     current = None
     for line in doc.splitlines():
         s = line.strip()
-        if s.startswith(("Args:", "Parameters:", "Arguments:")):
+        if s.startswith(("Args", "Parameters", "Arguments")):
             in_args = True
             in_description = False
             continue
@@ -51,10 +51,12 @@ def _parse_param_docs(doc):
         if not in_args:
             continue
 
-        if s == "":
-            break
+        if s.lower().startswith('return'):
+            in_description = True
+            in_args = False
+            method_doc.append(s)
 
-        m = re.match(r"(\w+)\s*:\s*(.*)", s)
+        m = re.match(r"(\w+)\s*[:-]\s*[:-]?\s*(.*)", s)
         if m:
             current, desc = m.groups()
             params[current] = desc.strip()
@@ -85,6 +87,9 @@ def make_tool_metadata(func):
 
     properties = {}
     required = []
+    print("Function Name:", func.__name__)
+    print("Method Parameters:", params)
+    print("Method Doc:", param_docs)
     for p in params:
         # skip *args/**kwargs
         if p.kind in (inspect.Parameter.VAR_POSITIONAL,
