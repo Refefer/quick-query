@@ -1,6 +1,9 @@
+import re 
+
 try:
     import tls_client
-except ImportError
+except ImportError:
+    raise
     import sys
     print("Need to install tls-client (pip install tls-client) to use the web tool.", file=sys.stderr)
     sys.exit(1)
@@ -11,14 +14,12 @@ except ImportError:
     print("Need to install BeautifulSoup (pip install beautifulsoup4) to use the web tool.", file=sys.stderr)
     sys.exit(1)
 
-import re 
-
-def fetch_page(
+def fetch_webpage(
     url: str,
     clean: bool = True
 ) -> str:
     """
-    Retrieve the HTML content of the given URL using a TLS‑Client session.
+    Retrieve the HTML content of the given URL.
 
     Parameters:
         url : str - The full URL of the webpage to download.

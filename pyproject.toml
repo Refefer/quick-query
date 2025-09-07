@@ -15,15 +15,19 @@ license = {text = "MIT"}
 dependencies = [
   "requests>=2.31"
 ]
-optional-dependencies = {
-  markdown = ["rich"],
-  template = ["Jinja2>=3.1"]
-}
 classifiers = [
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent"
 ]
 
+[project.optional-dependencies]
+markdown = ["rich"]
+template = ["Jinja2>=3.1"]
+web_tool = ["tls-client", "beautifulsoup4"]
+
 [project.urls]
 Homepage = "https://github.com/refefer/quick-query"
+
+[project.scripts]
+qq = "quick_query.cli:cli_entrypoint"   # script name -> module:function
