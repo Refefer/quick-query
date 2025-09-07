@@ -24,7 +24,7 @@ classifiers = [
 [project.optional-dependencies]
 markdown = ["rich"]
 template = ["Jinja2>=3.1"]
-web_tool = ["tls-client", "beautifulsoup4"]
+web_tool = ["tls-client", "beautifulsoup4", "lxml"]
 
 [project.urls]
 Homepage = "https://github.com/refefer/quick-query"

@@ -1,9 +1,9 @@
+import types
 import re 
 
 try:
     import tls_client
 except ImportError:
-    raise
     import sys
     print("Need to install tls-client (pip install tls-client) to use the web tool.", file=sys.stderr)
     sys.exit(1)
@@ -13,6 +13,22 @@ try:
 except ImportError:
     print("Need to install BeautifulSoup (pip install beautifulsoup4) to use the web tool.", file=sys.stderr)
     sys.exit(1)
+
+def build_session(allow_redirects=True, client_identifier="chrome_108"):
+    s = tls_client.Session(client_identifier=client_identifier)
+    # make sure every call uses allow_redirects=True unless overridden
+    s.default_allow_redirects = allow_redirects          # custom flag we’ll respect later
+
+    # Option A‑1 – modify `execute_request` at runtime (monkey‑patch)
+    _original_execute = s.execute_request
+
+    def _patched_execute(self, *args, **kwargs):
+        if "allow_redirects" not in kwargs:
+            kwargs["allow_redirects"] = getattr(self, "default_allow_redirects", False)
+        return _original_execute(*args, **kwargs)
+
+    s.execute_request = types.MethodType(_patched_execute, s)
+    return s
 
 def fetch_webpage(
     url: str,
@@ -30,10 +46,12 @@ def fetch_webpage(
             The raw text (HTML) of the response. If an error occurs, an empty string is returned.
     """
     try:
-        session = tls_client.Session(client_identifier="chrome_108")
+        session = build_session()
         response = session.get(url)
-        if clean:
+        ct = response.headers.get('Content-Type', 'unk')
+        if 'text/html' in ct and clean:
             return compact_html(response.text)
+
         return response.text
     except Exception:
         raise

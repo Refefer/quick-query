@@ -15,7 +15,7 @@ setuptools.setup(
     extras_require={
         "markdown": ["rich"],
         "template": ["Jinja2>=3.1"],
-        "web_tool": ["tls_client", "beautifulsoup4"]
+        "web_tool": ["tls_client", "beautifulsoup4", "lxml"]
     },
     author="Andrew Stanton",
     author_email="refefer@gmail.com",
