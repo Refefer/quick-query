@@ -2,6 +2,7 @@
 """
 from __future__ import annotations
 
+import json
 import atexit
 import pathlib
 import tempfile
@@ -111,7 +112,7 @@ class FileSystem(RootedBase):
             return f"Error using `{self.__class__.__name__}`: {e}"
     
     def head(self, path: str, k: int = 10) -> str:
-        """Return the first *k* lines of a text file as a single string.
+        """Return the first *k* lines of a text file.
 
         Parameters
         ----------
@@ -134,8 +135,11 @@ class FileSystem(RootedBase):
                 for i, line in enumerate(f):
                     if i >= k:
                         break
+
                     lines.append(line)
+
                 return "".join(lines)
+
         except Exception as e:
             return f"Error using `{self.__class__.__name__}`: {e}"
 
@@ -265,7 +269,8 @@ class FileSystem(RootedBase):
             return f"Error using `{self.__class__.__name__}`: {e}"
     
     def search_by_regex(self, path: str, regex: str, context: int) -> str:
-        """Search files under ``path`` for a regular expression using egrep.
+        """Search files under ``path`` for a regular expression using ripgrep.  Returns 
+        the first 100 matches.
 
         Parameters
         ----------
@@ -276,87 +281,83 @@ class FileSystem(RootedBase):
         Returns
         -------
         str
-            The formatted egrep output (with paths relative to the sandbox root) on success,
+            The formatted output (with paths relative to the sandbox root) on success,
             or an error string ``"Error using `<tool>`: <exception>`` on failure.
         """
         try:
             # Resolve the base directory; this also validates that it is within the root.
             base_path = self.resolve_path(path)
 
-            # Build the egrep command.  -R for recursive, -C<cnt> for context lines.
-            cmd = ["egrep", "-R", f"-C{context}", regex, "-n", str(base_path)]
+            # Build the ripgrep command.  -R for recursive, -C<cnt> for context lines.
+            cmd = ["rg", f"-C{context}", "--json", regex, str(base_path)]
             result = subprocess.run(cmd, capture_output=True, text=True)
 
-            # egrep returns 0 if matches found, 1 if none, >1 for errors.
+            # rg returns 0 if matches found, 1 if none, >1 for errors.
             if result.returncode not in (0, 1):
                 raise RuntimeError(f"egrep failed: {result.stderr.strip()}")
 
             output = result.stdout
             lines = []
             for line in output.splitlines():
-                line = line.rstrip('\n')
-                if line == '--':
-                    lines.append(line)
+                data = json.loads(line)
+                if data['type'] not in ('match', 'context'):
                     continue
 
-                parsed = parse_egrep_line(line)
-                if parsed is None:
-                    continue
-
-                abs_path = pathlib.Path(parsed['filename']).resolve()
+                abs_path = pathlib.Path(data['data']['path']['text']).resolve()
                 rel_path = str(abs_path)[self.root_len:]
-                parsed['filename'] = rel_path
-                delim = '-' if parsed['context'] else ':'
-                lines.append(f"{rel_path}{delim}{parsed['lineno']}{delim}{parsed['content']}")
+                delim = '-' if data['type'] == 'context' else ':'
+                lineno = data['data']['line_number']
+                content = data['data']['lines']['text']
+                lines.append(f"{rel_path}{delim}{lineno}{delim}{content}")
 
-            return '\n'.join(lines)
+            return '\n'.join(lines[:100])
 
         except Exception as e:
             return f"Error using `{self.__class__.__name__}`: {e}"
 
+    def find_files_by_regex(self, path: str, regex: str) -> str:
+        """Search files under ``path`` for a regular expression using ripgrep.  Returns
+        the filename and number of matches in the file.
 
-# ---------------------------------------------------------------------- 
-# Regex that recognises BOTH egrep formats: 
-# 
-#   1) Context lines (surrounding the match) 
-#        <filename>-<lineno>- 
-#   2) The matching line itself 
-#        <filename>:<lineno>: 
-# 
-#   • <filename> may contain spaces, hyphens, dots, colons, etc. 
-#   • The line‑content part (everything after the last delimiter) 
-#     is captured unchanged. 
-# ---------------------------------------------------------------------- 
-EGREP_LINE_RE = re.compile(r'''\
-    ^                                   # start of line
-    (?P<filename>.+?)                   # filename – lazy so it stops at the first delimiter
-    (?:                                 # non‑capturing group for the two possible delimiters
-        ([-:])(?P<lineno>\d+)\2         #   a) context line  → “-23-”
-    )
-    (?P<content>.*)                     # the rest of the line (the source code)
-    $                                   # end of line
-''', re.VERBOSE)
+        Parameters
+        ----------
+        path : str - Relative directory (under the managed root) to start the recursive search.
+        regex : str - Regular expression pattern to search for.
+        context : int - Number of context lines to include around each match.
 
-def parse_egrep_line(line: str) -> Dict:
-    """Parse a single egrep output line.
+        Returns
+        -------
+        str
+            filename:number of matches
+        """
+        try:
+            # Resolve the base directory; this also validates that it is within the root.
+            base_path = self.resolve_path(path)
 
-    Returns 
-    -------
-    dict | None 
-        {'filename': ..., 'lineno': int, 'is_match': bool, 'content': ...} 
-        or None if the line does not match the expected format. 
-    """
-    m = EGREP_LINE_RE.match(line)
-    if not m:
-        return None
+            # Build the ripgrep command.  -R for recursive, -C<cnt> for context lines.
+            cmd = ["rg", f"-C{context}", "--json", regex, str(base_path)]
+            result = subprocess.run(cmd, capture_output=True, text=True)
 
-    lineno = int(m.group('lineno'))
+            # rg returns 0 if matches found, 1 if none, >1 for errors.
+            if result.returncode not in (0, 1):
+                raise RuntimeError(f"egrep failed: {result.stderr.strip()}")
 
-    # ':' is a a match delimieter, '-' is a context delimiter.
-    is_match = ':' in line.split(str(lineno))[0]
-    return {
-        'filename': m.group('filename'), 
-        'lineno': lineno,
-        'context': not is_match,
-        'content': m.group('content')
-    }
+            output = result.stdout
+            lines = []
+            for line in output.splitlines():
+                data = json.loads(line)
+                if data['type'] not in ('match', 'context'):
+                    continue
+
+                abs_path = pathlib.Path(data['data']['path']['text']).resolve()
+                rel_path = str(abs_path)[self.root_len:]
+                delim = '-' if data['type'] == 'context' else ':'
+                lineno = data['data']['line_number']
+                content = data['data']['lines']['text']
+                lines.append(f"{rel_path}{delim}{lineno}{delim}{content}")
+
+            return '\n'.join(lines[:100])
+
+        except Exception as e:
+            return f"Error using `{self.__class__.__name__}`: {e}"
+

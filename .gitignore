@@ -60,3 +60,4 @@ venv.bak/
 # Vim swap files
 *.swp
 *.swo
+.aider*

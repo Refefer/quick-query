@@ -87,9 +87,6 @@ def make_tool_metadata(func):
 
     properties = {}
     required = []
-    print("Function Name:", func.__name__)
-    print("Method Parameters:", params)
-    print("Method Doc:", param_docs)
     for p in params:
         # skip *args/**kwargs
         if p.kind in (inspect.Parameter.VAR_POSITIONAL,

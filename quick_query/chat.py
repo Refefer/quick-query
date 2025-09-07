@@ -1,3 +1,5 @@
+import atexit
+import os
 import json
 import pprint
 from typing import Any, Callable, Dict, List, Optional
@@ -285,6 +287,7 @@ class Chat:
         formatter: Any,
         message_processor: Any,
         needs_buffering: bool,
+        use_history: bool = True
     ) -> None:
         """Create a new Chat instance.
 
@@ -295,6 +298,7 @@ class Chat:
             formatter: Formats processed blocks for display.
             message_processor: Handles conversion of raw text to chat messages.
             needs_buffering: Whether the formatter requires output buffering.
+            use_history: Whether to load/save history for calls.  Default True
         """
         self.initial_state = initial_state
         self.server = server
@@ -309,6 +313,20 @@ class Chat:
 
         for cmd_cls in (Reset, Save, Undo, Redo, Pretty, Multiline, ToolsToggle, Compact):
             self.add_command(cmd_cls())
+
+        if use_history:
+            self._setup_readline()
+
+    def _setup_readline(self) -> None:
+        # setup readline
+        hist_length = 1000
+        hist_path = os.path.expandvars("$HOME/.config/quick-query/qq.history.log")
+        if os.path.exists(hist_path):
+            readline.read_history_file(hist_path)
+
+        readline.set_history_length(hist_length)
+        readline.set_auto_history(True)
+        atexit.register(readline.write_history_file, hist_path)
 
     def _show_loaded_tools(self) -> None:
         """
